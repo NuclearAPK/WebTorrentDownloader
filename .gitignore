@@ -1,0 +1,29 @@
+# Зависимости
+node_modules/
+
+# Данные пользователей
+users.json
+
+# Загруженные файлы
+downloads/
+temp/
+
+# Логи
+*.log
+npm-debug.log*
+
+# Системные файлы
+.DS_Store
+Thumbs.db
+nul
+
+# IDE
+.idea/
+.vscode/
+.claude/
+*.swp
+*.swo
+
+# Переменные окружения
+.env
+.env.local

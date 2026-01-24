@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebTorrent Downloader</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Секция авторизации -->
+  <section id="authSection" class="auth-section">
+    <div class="auth-container">
+      <h1>WebTorrent Downloader</h1>
+
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-tab="login">Вход</button>
+        <button class="auth-tab" data-tab="register">Регистрация</button>
+      </div>
+
+      <form id="loginForm" class="auth-form">
+        <div class="form-group">
+          <label for="loginUsername">Логин</label>
+          <input type="text" id="loginUsername" required minlength="3" placeholder="Введите логин">
+        </div>
+        <div class="form-group">
+          <label for="loginPassword">Пароль</label>
+          <input type="password" id="loginPassword" required minlength="6" placeholder="Введите пароль">
+        </div>
+        <button type="submit" class="btn-primary">Войти</button>
+      </form>
+
+      <form id="registerForm" class="auth-form" style="display: none;">
+        <div class="form-group">
+          <label for="registerUsername">Логин</label>
+          <input type="text" id="registerUsername" required minlength="3" placeholder="Минимум 3 символа">
+        </div>
+        <div class="form-group">
+          <label for="registerPassword">Пароль</label>
+          <input type="password" id="registerPassword" required minlength="6" placeholder="Минимум 6 символов">
+        </div>
+        <button type="submit" class="btn-primary">Зарегистрироваться</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Секция приложения -->
+  <section id="appSection" class="container" style="display: none;">
+    <header>
+      <h1>WebTorrent Downloader</h1>
+      <div class="user-info">
+        <span id="usernameDisplay"></span>
+        <button id="logoutBtn" class="btn-secondary">Выйти</button>
+      </div>
+    </header>
+
+    <main>
+      <!-- Форма добавления торрента -->
+      <section class="add-torrent">
+        <h2>Добавить торрент</h2>
+
+        <div class="form-group">
+          <label for="magnetUri">Магнет-ссылка:</label>
+          <div class="input-row">
+            <input type="text" id="magnetUri" placeholder="magnet:?xt=urn:btih:...">
+            <button id="addMagnet">Добавить</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="torrentFile">.torrent файл:</label>
+          <div class="input-row">
+            <input type="file" id="torrentFile" accept=".torrent">
+            <button id="uploadTorrent">Загрузить</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="downloadDir">Каталог загрузки:</label>
+          <div class="input-row">
+            <input type="text" id="downloadDir" placeholder="Путь к каталогу">
+            <button id="changeDir">Изменить</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Активные загрузки -->
+      <section class="active-downloads">
+        <h2>Активные загрузки</h2>
+        <div id="torrentsList" class="torrents-list">
+          <p class="empty-message">Нет активных загрузок</p>
+        </div>
+      </section>
+
+      <!-- Скачанные файлы -->
+      <section class="downloaded-files">
+        <h2>Скачанные файлы</h2>
+        <button id="refreshFiles" class="refresh-btn">Обновить</button>
+        <div id="filesList" class="files-list">
+          <p class="empty-message">Нет скачанных файлов</p>
+        </div>
+      </section>
+    </main>
+  </section>
+
+  <!-- Уведомления -->
+  <div id="notifications" class="notifications"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
