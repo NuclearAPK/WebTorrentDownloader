@@ -41,17 +41,43 @@ class DLNAServer {
 
   /**
    * Получить локальный IP адрес
+   * Предпочитает реальные сетевые адаптеры над виртуальными
    */
   getLocalIP() {
     const interfaces = os.networkInterfaces();
+    const candidates = [];
+
+    // Виртуальные адаптеры, которые нужно пропустить
+    const virtualPatterns = [
+      /vmware/i, /virtualbox/i, /vbox/i, /hyper-v/i,
+      /vethernet/i, /docker/i, /wsl/i, /vmnet/i
+    ];
+
     for (const name of Object.keys(interfaces)) {
+      // Пропускаем виртуальные адаптеры
+      const isVirtual = virtualPatterns.some(pattern => pattern.test(name));
+
       for (const iface of interfaces[name]) {
         if (iface.family === 'IPv4' && !iface.internal) {
-          return iface.address;
+          candidates.push({
+            name,
+            address: iface.address,
+            isVirtual,
+            // Предпочитаем адреса 192.168.x.x и 10.x.x.x
+            isPrivate: iface.address.startsWith('192.168.') || iface.address.startsWith('10.')
+          });
         }
       }
     }
-    return '127.0.0.1';
+
+    // Сортируем: реальные адаптеры с приватными IP первыми
+    candidates.sort((a, b) => {
+      if (a.isVirtual !== b.isVirtual) return a.isVirtual ? 1 : -1;
+      if (a.isPrivate !== b.isPrivate) return a.isPrivate ? -1 : 1;
+      return 0;
+    });
+
+    return candidates.length > 0 ? candidates[0].address : '127.0.0.1';
   }
 
   /**

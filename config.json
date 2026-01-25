@@ -5,7 +5,7 @@
   "dlna": {
     "serverPort": 10293,
     "serverName": "WebTorrent Media Server",
-    "autoStart": false
+    "autoStart": true
   },
   "downloads": {
     "directory": "./downloads"
