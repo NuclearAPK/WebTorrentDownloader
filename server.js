@@ -8,22 +8,63 @@ import { fileURLToPath } from 'url';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 
+// DLNA модули
+import {
+  StreamingServer,
+  DeviceDiscovery,
+  MediaRenderer,
+  DLNAServer,
+  Transcoder
+} from './dlna/index.js';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Загрузка конфигурации
+const CONFIG_FILE = path.join(__dirname, 'config.json');
+let config = {
+  server: { port: 3000 },
+  dlna: { serverPort: 10293, serverName: 'WebTorrent Media Server', autoStart: false },
+  downloads: { directory: './downloads' }
+};
+
+if (fs.existsSync(CONFIG_FILE)) {
+  try {
+    const configData = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
+    config = { ...config, ...configData };
+    console.log('Конфигурация загружена из config.json');
+  } catch (e) {
+    console.error('Ошибка чтения config.json, используются значения по умолчанию:', e.message);
+  }
+}
+
 const app = express();
 const client = new WebTorrent();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || config.server.port;
+const DLNA_PORT = config.dlna.serverPort;
+const DLNA_SERVER_NAME = config.dlna.serverName;
 const JWT_SECRET = process.env.JWT_SECRET || 'webtorrent-secret-key-change-in-production';
 const USERS_FILE = path.join(__dirname, 'users.json');
 
-// Каталог загрузки по умолчанию
-let downloadDirectory = path.join(__dirname, 'downloads');
+// Каталог загрузки
+let downloadDirectory = path.isAbsolute(config.downloads.directory)
+  ? config.downloads.directory
+  : path.join(__dirname, config.downloads.directory);
 
 // Создаём каталог загрузки, если не существует
 if (!fs.existsSync(downloadDirectory)) {
   fs.mkdirSync(downloadDirectory, { recursive: true });
 }
+
+// Инициализация DLNA модулей
+const streamingServer = new StreamingServer(downloadDirectory, client);
+const deviceDiscovery = new DeviceDiscovery();
+const mediaRenderer = new MediaRenderer(deviceDiscovery);
+const dlnaServer = new DLNAServer(downloadDirectory, { port: DLNA_PORT, serverName: DLNA_SERVER_NAME });
+const transcoder = new Transcoder(downloadDirectory);
+
+// Запускаем обнаружение устройств
+deviceDiscovery.init();
 
 // Загрузка/сохранение пользователей
 function loadUsers() {
@@ -417,6 +458,12 @@ app.post('/api/settings/directory', authMiddleware, (req, res) => {
       fs.mkdirSync(newPath, { recursive: true });
     }
     downloadDirectory = newPath;
+
+    // Обновляем директорию в DLNA модулях
+    streamingServer.setDownloadDirectory(newPath);
+    dlnaServer.setDownloadDirectory(newPath);
+    transcoder.setDownloadDirectory(newPath);
+
     res.json({ success: true, directory: downloadDirectory });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -428,15 +475,248 @@ app.get('/api/settings/directory', authMiddleware, (req, res) => {
   res.json({ directory: downloadDirectory });
 });
 
+// Получить конфигурацию
+app.get('/api/settings/config', authMiddleware, (req, res) => {
+  res.json(config);
+});
+
+// Сохранить конфигурацию
+app.post('/api/settings/config', authMiddleware, (req, res) => {
+  const newConfig = req.body;
+
+  try {
+    // Обновляем конфигурацию
+    if (newConfig.server) {
+      config.server = { ...config.server, ...newConfig.server };
+    }
+    if (newConfig.dlna) {
+      config.dlna = { ...config.dlna, ...newConfig.dlna };
+    }
+    if (newConfig.downloads) {
+      config.downloads = { ...config.downloads, ...newConfig.downloads };
+    }
+
+    // Сохраняем в файл
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
+
+    res.json({ success: true, config, message: 'Конфигурация сохранена. Перезапустите сервер для применения изменений портов.' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// === DLNA API ===
+
+// --- Streaming ---
+
+// Стриминг файла из downloads
+app.get('/api/stream/:filename(*)', (req, res) => {
+  streamingServer.streamFile(req, res);
+});
+
+// Стриминг файла из активного торрента
+app.get('/api/stream/torrent/:infoHash/:fileIndex', (req, res) => {
+  streamingServer.streamTorrent(req, res);
+});
+
+// Список медиа-файлов для стриминга
+app.get('/api/media/files', authMiddleware, (req, res) => {
+  const files = streamingServer.getMediaFiles();
+  res.json(files);
+});
+
+// --- Device Discovery ---
+
+// Список найденных DLNA устройств
+app.get('/api/dlna/devices', authMiddleware, (req, res) => {
+  const devices = deviceDiscovery.getDevices();
+  res.json({
+    devices,
+    scanning: deviceDiscovery.isScanning()
+  });
+});
+
+// Запустить сканирование сети
+app.post('/api/dlna/devices/scan', authMiddleware, (req, res) => {
+  deviceDiscovery.scan();
+  res.json({ success: true, message: 'Сканирование запущено' });
+});
+
+// --- Media Renderer (Cast) ---
+
+// Отправить медиа на устройство
+app.post('/api/dlna/cast', authMiddleware, async (req, res) => {
+  const { deviceId, filename, torrent } = req.body;
+
+  if (!deviceId) {
+    return res.status(400).json({ error: 'ID устройства обязателен' });
+  }
+
+  try {
+    // Определяем URL для стриминга
+    const host = req.headers.host;
+    let mediaUrl, title, mimeType;
+
+    if (torrent) {
+      // Стриминг из торрента
+      const { infoHash, fileIndex } = torrent;
+      const fileInfo = streamingServer.getTorrentFileInfo(infoHash, fileIndex);
+
+      if (!fileInfo) {
+        return res.status(404).json({ error: 'Файл торрента не найден' });
+      }
+
+      mediaUrl = streamingServer.getTorrentStreamUrl(infoHash, fileIndex, host);
+      title = fileInfo.name;
+      mimeType = fileInfo.mimeType;
+    } else if (filename) {
+      // Стриминг из файла
+      const fileInfo = streamingServer.getFileInfo(filename);
+
+      if (!fileInfo) {
+        return res.status(404).json({ error: 'Файл не найден' });
+      }
+
+      // Проверяем, нужно ли транскодирование
+      if (transcoder.needsTranscoding(filename)) {
+        mediaUrl = transcoder.getTranscodeUrl(filename, host, 'medium');
+        mimeType = 'video/mp4';
+      } else {
+        mediaUrl = streamingServer.getStreamUrl(filename, host);
+        mimeType = fileInfo.mimeType;
+      }
+      title = path.basename(filename);
+    } else {
+      return res.status(400).json({ error: 'Укажите filename или torrent' });
+    }
+
+    const result = await mediaRenderer.cast(deviceId, mediaUrl, title, mimeType);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Управление воспроизведением
+app.post('/api/dlna/control/:action', authMiddleware, async (req, res) => {
+  const { action } = req.params;
+
+  try {
+    let result;
+
+    switch (action) {
+      case 'play':
+        result = await mediaRenderer.play();
+        break;
+      case 'pause':
+        result = await mediaRenderer.pause();
+        break;
+      case 'stop':
+        result = await mediaRenderer.stop();
+        break;
+      case 'seek':
+        const { position } = req.body;
+        if (position === undefined) {
+          return res.status(400).json({ error: 'Позиция обязательна' });
+        }
+        result = await mediaRenderer.seek(position);
+        break;
+      case 'volume':
+        const { volume } = req.body;
+        if (volume === undefined) {
+          return res.status(400).json({ error: 'Громкость обязательна' });
+        }
+        result = await mediaRenderer.setVolume(volume);
+        break;
+      default:
+        return res.status(400).json({ error: 'Неизвестное действие' });
+    }
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Статус воспроизведения
+app.get('/api/dlna/status', authMiddleware, async (req, res) => {
+  try {
+    const status = await mediaRenderer.getStatus();
+    res.json(status);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- DLNA Server ---
+
+// Статус DLNA сервера
+app.get('/api/dlna/server/status', authMiddleware, (req, res) => {
+  res.json(dlnaServer.getStatus());
+});
+
+// Запустить DLNA сервер
+app.post('/api/dlna/server/start', authMiddleware, async (req, res) => {
+  try {
+    const result = await dlnaServer.start();
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Остановить DLNA сервер
+app.post('/api/dlna/server/stop', authMiddleware, async (req, res) => {
+  try {
+    const result = await dlnaServer.stop();
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- Transcoding ---
+
+// Транскодирование на лету
+app.get('/api/transcode/:filename(*)', (req, res) => {
+  transcoder.handleTranscodeRequest(req, res);
+});
+
+// Поддерживаемые форматы транскодирования
+app.get('/api/transcode/formats', authMiddleware, (req, res) => {
+  res.json(transcoder.getSupportedFormats());
+});
+
+// Проверка ffmpeg
+app.get('/api/transcode/check', authMiddleware, async (req, res) => {
+  const result = await transcoder.checkFfmpeg();
+  res.json(result);
+});
+
 // Запуск сервера
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Сервер запущен на http://localhost:${PORT}`);
   console.log(`Каталог загрузки: ${downloadDirectory}`);
+
+  // Автозапуск DLNA сервера если включено в конфиге
+  if (config.dlna.autoStart) {
+    try {
+      await dlnaServer.start();
+    } catch (e) {
+      console.error('Ошибка автозапуска DLNA сервера:', e.message);
+    }
+  }
 });
 
 // Обработка завершения
 process.on('SIGINT', async () => {
   console.log('\nЗавершение работы...');
+
+  // Останавливаем DLNA модули
+  deviceDiscovery.destroy();
+  mediaRenderer.destroy();
+  await dlnaServer.stop();
+
   await client.destroy();
   process.exit(0);
 });

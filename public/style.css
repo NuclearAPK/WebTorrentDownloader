@@ -448,8 +448,16 @@ button:active {
 .torrent-file {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   padding: 5px 0;
   color: #a0a0a0;
+  gap: 10px;
+}
+
+.torrent-file .btn-cast {
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  flex-shrink: 0;
 }
 
 .torrent-file-name {
@@ -460,6 +468,229 @@ button:active {
 .torrent-file-progress {
   color: #00d9ff;
   margin-left: 10px;
+}
+
+/* DLNA Section */
+.dlna-section {
+  margin-top: 20px;
+}
+
+.dlna-server-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  margin-bottom: 15px;
+}
+
+.dlna-server-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dlna-server-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #666;
+}
+
+.dlna-server-indicator.active {
+  background: #00ff88;
+  box-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+}
+
+.dlna-server-controls {
+  display: flex;
+  gap: 10px;
+}
+
+.btn-small {
+  padding: 8px 15px;
+  font-size: 0.85rem;
+}
+
+.dlna-devices {
+  margin-bottom: 15px;
+}
+
+.dlna-devices-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.dlna-devices-header h3 {
+  color: #a0a0a0;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.devices-list {
+  min-height: 50px;
+}
+
+.device-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 15px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.device-info {
+  flex: 1;
+}
+
+.device-name {
+  color: #fff;
+  font-weight: 500;
+}
+
+.device-details {
+  font-size: 0.8rem;
+  color: #666;
+  margin-top: 2px;
+}
+
+.device-item .btn-small {
+  margin-left: 10px;
+}
+
+/* Playback Panel */
+.playback-panel {
+  background: rgba(0, 217, 255, 0.1);
+  border: 1px solid rgba(0, 217, 255, 0.3);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.playback-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.playback-device {
+  color: #00d9ff;
+  font-weight: 600;
+}
+
+.playback-status {
+  color: #a0a0a0;
+  font-size: 0.9rem;
+}
+
+.playback-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.playback-progress span {
+  color: #a0a0a0;
+  font-size: 0.85rem;
+  min-width: 45px;
+}
+
+.playback-bar {
+  flex: 1;
+  height: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 3px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.playback-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #00d9ff 0%, #00ff88 100%);
+  border-radius: 3px;
+  transition: width 0.3s;
+  width: 0%;
+}
+
+.playback-controls {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.playback-btn {
+  padding: 10px 25px;
+  font-size: 0.9rem;
+}
+
+/* Cast Modal */
+.cast-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.cast-modal-content {
+  background: #1a1a2e;
+  border-radius: 16px;
+  padding: 30px;
+  max-width: 400px;
+  width: 90%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.cast-modal h3 {
+  color: #00d9ff;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.cast-modal .devices-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.cast-modal .device-item {
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.cast-modal .device-item:hover {
+  background: rgba(0, 217, 255, 0.1);
+}
+
+.cast-modal-close {
+  margin-top: 20px;
+  width: 100%;
+}
+
+/* File actions with cast button */
+.file-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-cast {
+  background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%);
+  color: #fff;
+}
+
+.btn-cast:hover {
+  box-shadow: 0 5px 15px rgba(155, 89, 182, 0.3);
 }
 
 /* Responsive */

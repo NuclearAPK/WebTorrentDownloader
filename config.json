@@ -1,0 +1,13 @@
+{
+  "server": {
+    "port": 3000
+  },
+  "dlna": {
+    "serverPort": 10293,
+    "serverName": "WebTorrent Media Server",
+    "autoStart": false
+  },
+  "downloads": {
+    "directory": "./downloads"
+  }
+}

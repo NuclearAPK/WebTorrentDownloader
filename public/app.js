@@ -21,6 +21,26 @@ const filesList = document.getElementById('filesList');
 const refreshFilesBtn = document.getElementById('refreshFiles');
 const notifications = document.getElementById('notifications');
 
+// DLNA элементы
+const dlnaServerIndicator = document.getElementById('dlnaServerIndicator');
+const dlnaServerStatusText = document.getElementById('dlnaServerStatusText');
+const startDlnaServerBtn = document.getElementById('startDlnaServer');
+const stopDlnaServerBtn = document.getElementById('stopDlnaServer');
+const scanDevicesBtn = document.getElementById('scanDevices');
+const devicesList = document.getElementById('devicesList');
+const playbackPanel = document.getElementById('playbackPanel');
+const playbackDevice = document.getElementById('playbackDevice');
+const playbackStatus = document.getElementById('playbackStatus');
+const playbackPosition = document.getElementById('playbackPosition');
+const playbackDuration = document.getElementById('playbackDuration');
+const playbackBarFill = document.getElementById('playbackBarFill');
+const playBtn = document.getElementById('playBtn');
+const pauseBtn = document.getElementById('pauseBtn');
+const stopBtn = document.getElementById('stopBtn');
+
+// Интервал обновления статуса воспроизведения
+let playbackStatusInterval = null;
+
 // API запрос с авторизацией
 async function apiRequest(url, options = {}) {
   const headers = options.headers || {};
@@ -131,6 +151,11 @@ function showApp(username) {
   loadCurrentDirectory();
   loadFiles();
   connectSSE();
+
+  // Загружаем DLNA статус
+  loadDlnaServerStatus();
+  loadDevices();
+  loadPlaybackStatus();
 }
 
 // Проверка текущей сессии
@@ -324,10 +349,11 @@ function renderTorrents(torrents) {
         <div class="torrent-files">
           <button class="torrent-files-toggle" onclick="toggleFiles(this)">Показать файлы (${torrent.files.length})</button>
           <div class="torrent-files-list" style="display: none;">
-            ${torrent.files.map(file => `
+            ${torrent.files.map((file, index) => `
               <div class="torrent-file">
                 <span class="torrent-file-name">${escapeHtml(file.name)}</span>
                 <span class="torrent-file-progress">${file.progress}%</span>
+                ${isMediaFile(file.name) ? `<button class="btn-cast btn-small" onclick="showCastModal(null, {infoHash: '${torrent.infoHash}', fileIndex: ${index}})">Cast</button>` : ''}
               </div>
             `).join('')}
           </div>
@@ -384,6 +410,13 @@ async function removeFile(filename) {
   }
 }
 
+// Проверить, является ли файл медиа-файлом
+function isMediaFile(filename) {
+  const ext = filename.split('.').pop().toLowerCase();
+  const mediaExtensions = ['mp4', 'mkv', 'avi', 'webm', 'mov', 'wmv', 'flv', 'm4v', 'mp3', 'flac', 'aac', 'ogg', 'wav'];
+  return mediaExtensions.includes(ext);
+}
+
 // Отрисовка списка файлов
 function renderFiles(files) {
   if (files.length === 0) {
@@ -397,7 +430,10 @@ function renderFiles(files) {
         <div class="file-name">${escapeHtml(file.name)}</div>
         <div class="file-size">${formatBytes(file.size)}</div>
       </div>
-      <button class="btn-danger" onclick="removeFile('${escapeHtml(file.name)}')">Удалить</button>
+      <div class="file-actions">
+        ${isMediaFile(file.name) ? `<button class="btn-cast btn-small" onclick="showCastModal('${escapeHtml(file.name)}')">Транслировать</button>` : ''}
+        <button class="btn-danger btn-small" onclick="removeFile('${escapeHtml(file.name)}')">Удалить</button>
+      </div>
     </div>
   `).join('');
 }
@@ -407,6 +443,273 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+// === DLNA функции ===
+
+// Форматирование времени
+function formatTime(seconds) {
+  if (!seconds || isNaN(seconds)) return '0:00';
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+// Загрузка статуса DLNA сервера
+async function loadDlnaServerStatus() {
+  try {
+    const response = await apiRequest('/api/dlna/server/status');
+    const status = await response.json();
+    updateDlnaServerUI(status);
+  } catch (error) {
+    console.error('Ошибка загрузки статуса DLNA:', error);
+  }
+}
+
+// Обновление UI DLNA сервера
+function updateDlnaServerUI(status) {
+  if (status.running) {
+    dlnaServerIndicator.classList.add('active');
+    dlnaServerStatusText.textContent = `DLNA сервер: ${status.name} (${status.ip}:${status.port})`;
+    startDlnaServerBtn.style.display = 'none';
+    stopDlnaServerBtn.style.display = 'inline-block';
+  } else {
+    dlnaServerIndicator.classList.remove('active');
+    dlnaServerStatusText.textContent = 'DLNA сервер остановлен';
+    startDlnaServerBtn.style.display = 'inline-block';
+    stopDlnaServerBtn.style.display = 'none';
+  }
+}
+
+// Запустить DLNA сервер
+async function startDlnaServer() {
+  try {
+    const response = await apiRequest('/api/dlna/server/start', { method: 'POST' });
+    const result = await response.json();
+
+    if (response.ok) {
+      showNotification('DLNA сервер запущен', 'success');
+      loadDlnaServerStatus();
+    } else {
+      showNotification(result.error, 'error');
+    }
+  } catch (error) {
+    showNotification('Ошибка запуска DLNA сервера', 'error');
+  }
+}
+
+// Остановить DLNA сервер
+async function stopDlnaServer() {
+  try {
+    const response = await apiRequest('/api/dlna/server/stop', { method: 'POST' });
+    const result = await response.json();
+
+    if (response.ok) {
+      showNotification('DLNA сервер остановлен', 'success');
+      loadDlnaServerStatus();
+    } else {
+      showNotification(result.error, 'error');
+    }
+  } catch (error) {
+    showNotification('Ошибка остановки DLNA сервера', 'error');
+  }
+}
+
+// Загрузка списка устройств
+async function loadDevices() {
+  try {
+    const response = await apiRequest('/api/dlna/devices');
+    const data = await response.json();
+    renderDevices(data.devices);
+  } catch (error) {
+    console.error('Ошибка загрузки устройств:', error);
+  }
+}
+
+// Сканировать устройства
+async function scanDevices() {
+  try {
+    const response = await apiRequest('/api/dlna/devices/scan', { method: 'POST' });
+
+    if (response.ok) {
+      showNotification('Сканирование запущено', 'info');
+      // Обновляем список через 3 секунды
+      setTimeout(loadDevices, 3000);
+    }
+  } catch (error) {
+    showNotification('Ошибка сканирования', 'error');
+  }
+}
+
+// Отрисовка списка устройств
+function renderDevices(devices) {
+  if (!devices || devices.length === 0) {
+    devicesList.innerHTML = '<p class="empty-message">Нет устройств. Нажмите "Сканировать"</p>';
+    return;
+  }
+
+  devicesList.innerHTML = devices.map(device => `
+    <div class="device-item" data-device-id="${device.id}">
+      <div class="device-info">
+        <div class="device-name">${escapeHtml(device.name)}</div>
+        <div class="device-details">${escapeHtml(device.manufacturer)} - ${escapeHtml(device.ip)}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// Показать модальное окно выбора устройства для трансляции
+function showCastModal(filename, torrent = null) {
+  // Создаём модальное окно
+  const modal = document.createElement('div');
+  modal.className = 'cast-modal';
+  modal.innerHTML = `
+    <div class="cast-modal-content">
+      <h3>Транслировать на устройство</h3>
+      <div class="devices-list" id="castDevicesList">
+        <p class="empty-message">Загрузка...</p>
+      </div>
+      <button class="btn-secondary cast-modal-close">Отмена</button>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  // Загружаем устройства
+  apiRequest('/api/dlna/devices')
+    .then(response => response.json())
+    .then(data => {
+      const list = modal.querySelector('#castDevicesList');
+
+      if (!data.devices || data.devices.length === 0) {
+        list.innerHTML = '<p class="empty-message">Нет доступных устройств</p>';
+        return;
+      }
+
+      list.innerHTML = data.devices.map(device => `
+        <div class="device-item" data-device-id="${device.id}">
+          <div class="device-info">
+            <div class="device-name">${escapeHtml(device.name)}</div>
+            <div class="device-details">${escapeHtml(device.manufacturer)}</div>
+          </div>
+        </div>
+      `).join('');
+
+      // Обработчики клика на устройства
+      list.querySelectorAll('.device-item').forEach(item => {
+        item.addEventListener('click', () => {
+          const deviceId = item.dataset.deviceId;
+          castToDevice(deviceId, filename, torrent);
+          modal.remove();
+        });
+      });
+    });
+
+  // Закрытие модального окна
+  modal.querySelector('.cast-modal-close').addEventListener('click', () => {
+    modal.remove();
+  });
+
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      modal.remove();
+    }
+  });
+}
+
+// Отправить на устройство
+async function castToDevice(deviceId, filename, torrent = null) {
+  try {
+    const body = { deviceId };
+
+    if (torrent) {
+      body.torrent = torrent;
+    } else {
+      body.filename = filename;
+    }
+
+    const response = await apiRequest('/api/dlna/cast', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    });
+
+    const result = await response.json();
+
+    if (response.ok) {
+      showNotification(`Трансляция на ${result.device.name}`, 'success');
+      startPlaybackStatusPolling();
+    } else {
+      showNotification(result.error, 'error');
+    }
+  } catch (error) {
+    showNotification('Ошибка трансляции', 'error');
+  }
+}
+
+// Управление воспроизведением
+async function controlPlayback(action, params = {}) {
+  try {
+    const response = await apiRequest(`/api/dlna/control/${action}`, {
+      method: 'POST',
+      body: JSON.stringify(params)
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      showNotification(result.error, 'error');
+    }
+
+    if (action === 'stop') {
+      stopPlaybackStatusPolling();
+    }
+  } catch (error) {
+    showNotification('Ошибка управления воспроизведением', 'error');
+  }
+}
+
+// Загрузка статуса воспроизведения
+async function loadPlaybackStatus() {
+  try {
+    const response = await apiRequest('/api/dlna/status');
+    const status = await response.json();
+    updatePlaybackUI(status);
+  } catch (error) {
+    console.error('Ошибка загрузки статуса:', error);
+  }
+}
+
+// Обновление UI воспроизведения
+function updatePlaybackUI(status) {
+  if (!status.active) {
+    playbackPanel.style.display = 'none';
+    return;
+  }
+
+  playbackPanel.style.display = 'block';
+  playbackDevice.textContent = status.device?.name || 'Устройство';
+  playbackStatus.textContent = status.state || 'UNKNOWN';
+  playbackPosition.textContent = formatTime(status.position);
+  playbackDuration.textContent = formatTime(status.duration);
+
+  const progress = status.duration > 0 ? (status.position / status.duration) * 100 : 0;
+  playbackBarFill.style.width = `${progress}%`;
+}
+
+// Запуск периодического опроса статуса
+function startPlaybackStatusPolling() {
+  stopPlaybackStatusPolling();
+  loadPlaybackStatus();
+  playbackStatusInterval = setInterval(loadPlaybackStatus, 2000);
+}
+
+// Остановка опроса статуса
+function stopPlaybackStatusPolling() {
+  if (playbackStatusInterval) {
+    clearInterval(playbackStatusInterval);
+    playbackStatusInterval = null;
+  }
+  playbackPanel.style.display = 'none';
 }
 
 // SSE для обновления прогресса
@@ -466,6 +769,14 @@ document.addEventListener('DOMContentLoaded', () => {
   uploadTorrentBtn.addEventListener('click', uploadTorrentFile);
   changeDirBtn.addEventListener('click', changeDirectory);
   refreshFilesBtn.addEventListener('click', loadFiles);
+
+  // DLNA обработчики
+  startDlnaServerBtn.addEventListener('click', startDlnaServer);
+  stopDlnaServerBtn.addEventListener('click', stopDlnaServer);
+  scanDevicesBtn.addEventListener('click', scanDevices);
+  playBtn.addEventListener('click', () => controlPlayback('play'));
+  pauseBtn.addEventListener('click', () => controlPlayback('pause'));
+  stopBtn.addEventListener('click', () => controlPlayback('stop'));
 
   // Проверка авторизации
   checkAuth();

@@ -99,6 +99,54 @@
           <p class="empty-message">Нет скачанных файлов</p>
         </div>
       </section>
+
+      <!-- DLNA -->
+      <section class="dlna-section">
+        <h2>DLNA / Трансляция</h2>
+
+        <!-- Статус DLNA сервера -->
+        <div class="dlna-server-status">
+          <div class="dlna-server-info">
+            <span class="dlna-server-indicator" id="dlnaServerIndicator"></span>
+            <span id="dlnaServerStatusText">DLNA сервер остановлен</span>
+          </div>
+          <div class="dlna-server-controls">
+            <button id="startDlnaServer" class="btn-small">Запустить сервер</button>
+            <button id="stopDlnaServer" class="btn-small btn-secondary" style="display: none;">Остановить</button>
+          </div>
+        </div>
+
+        <!-- Устройства -->
+        <div class="dlna-devices">
+          <div class="dlna-devices-header">
+            <h3>Устройства в сети</h3>
+            <button id="scanDevices" class="btn-small">Сканировать</button>
+          </div>
+          <div id="devicesList" class="devices-list">
+            <p class="empty-message">Нет устройств</p>
+          </div>
+        </div>
+
+        <!-- Панель воспроизведения -->
+        <div id="playbackPanel" class="playback-panel" style="display: none;">
+          <div class="playback-info">
+            <span class="playback-device" id="playbackDevice"></span>
+            <span class="playback-status" id="playbackStatus"></span>
+          </div>
+          <div class="playback-progress">
+            <span id="playbackPosition">0:00</span>
+            <div class="playback-bar">
+              <div class="playback-bar-fill" id="playbackBarFill"></div>
+            </div>
+            <span id="playbackDuration">0:00</span>
+          </div>
+          <div class="playback-controls">
+            <button id="playBtn" class="playback-btn">Play</button>
+            <button id="pauseBtn" class="playback-btn">Pause</button>
+            <button id="stopBtn" class="playback-btn btn-danger">Stop</button>
+          </div>
+        </div>
+      </section>
     </main>
   </section>
 
