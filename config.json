@@ -2,6 +2,9 @@
   "server": {
     "port": 3000
   },
+  "torrent": {
+    "port": 0
+  },
   "dlna": {
     "serverPort": 10293,
     "serverName": "WebTorrent Media Server",

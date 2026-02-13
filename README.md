@@ -11,6 +11,10 @@
 - Просмотр скорости загрузки/отдачи и количества пиров
 - Управление скачанными файлами
 - Настраиваемый каталог загрузки
+- DLNA/UPnP — обнаружение MediaRenderer устройств в сети и трансляция медиа (cast)
+- DLNA Media Server — публикация медиа-библиотеки для других устройств в сети
+- HTTP-стриминг файлов и активных торрентов с поддержкой Range requests
+- Транскодирование видео на лету (требуется ffmpeg)
 
 ## Требования
 
@@ -30,11 +34,45 @@ npm start
 
 Сервер запустится на http://localhost:3000
 
+## Конфигурация
+
+Настройки хранятся в файле `config.json`. Если файл отсутствует, используются значения по умолчанию.
+
+```json
+{
+  "server": {
+    "port": 3000
+  },
+  "torrent": {
+    "port": 0
+  },
+  "dlna": {
+    "serverPort": 10293,
+    "serverName": "WebTorrent Media Server",
+    "autoStart": false
+  },
+  "downloads": {
+    "directory": "./downloads"
+  }
+}
+```
+
+| Параметр | Описание | По умолчанию |
+|----------|----------|--------------|
+| `server.port` | Порт веб-сервера | `3000` |
+| `torrent.port` | TCP-порт для входящих BitTorrent-соединений (`0` — случайный) | `0` |
+| `dlna.serverPort` | Порт DLNA Media Server | `10293` |
+| `dlna.serverName` | Имя DLNA-сервера в сети | `WebTorrent Media Server` |
+| `dlna.autoStart` | Автозапуск DLNA-сервера при старте приложения | `false` |
+| `downloads.directory` | Каталог загрузки | `./downloads` |
+
+Конфигурацию также можно изменить через API (`/api/settings/config`). Изменение портов требует перезапуска.
+
 ## Переменные окружения
 
 | Переменная | Описание | По умолчанию |
 |------------|----------|--------------|
-| `PORT` | Порт сервера | 3000 |
+| `PORT` | Порт сервера (переопределяет `server.port`) | `3000` |
 | `JWT_SECRET` | Секретный ключ для JWT токенов | `webtorrent-secret-key-change-in-production` |
 
 ## API
@@ -72,19 +110,53 @@ npm start
 |-------|----------|----------|
 | GET | `/api/settings/directory` | Получить текущий каталог загрузки |
 | POST | `/api/settings/directory` | Изменить каталог загрузки |
+| GET | `/api/settings/config` | Получить текущую конфигурацию |
+| POST | `/api/settings/config` | Сохранить конфигурацию |
+
+### DLNA
+
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| GET | `/api/dlna/devices` | Список найденных DLNA-устройств |
+| POST | `/api/dlna/devices/scan` | Запустить сканирование сети |
+| POST | `/api/dlna/cast` | Отправить медиа на устройство |
+| POST | `/api/dlna/control/:action` | Управление воспроизведением (`play`, `pause`, `stop`, `seek`, `volume`) |
+| GET | `/api/dlna/status` | Статус текущего воспроизведения |
+| GET | `/api/dlna/server/status` | Статус DLNA Media Server |
+| POST | `/api/dlna/server/start` | Запустить DLNA Media Server |
+| POST | `/api/dlna/server/stop` | Остановить DLNA Media Server |
+
+### Стриминг и транскодирование
+
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| GET | `/api/stream/:filename` | Стриминг файла из каталога загрузок |
+| GET | `/api/stream/torrent/:infoHash/:fileIndex` | Стриминг файла из активного торрента |
+| GET | `/api/media/files` | Список медиа-файлов |
+| GET | `/api/transcode/:filename` | Транскодирование видео на лету |
+| GET | `/api/transcode/formats` | Поддерживаемые форматы |
+| GET | `/api/transcode/check` | Проверка наличия ffmpeg |
 
 ## Структура проекта
 
 ```
 WebTorrent/
-├── server.js          # Сервер Express
+├── server.js              # Сервер Express
+├── config.json            # Конфигурация
 ├── package.json
-├── users.json         # База пользователей (создаётся автоматически)
+├── users.json             # База пользователей (создаётся автоматически)
 ├── public/
-│   ├── index.html     # Главная страница
-│   ├── style.css      # Стили
-│   └── app.js         # Клиентский JavaScript
-└── downloads/         # Каталог загрузки (создаётся автоматически)
+│   ├── index.html         # Главная страница
+│   ├── style.css          # Стили
+│   └── app.js             # Клиентский JavaScript
+├── dlna/
+│   ├── index.js           # Экспорт DLNA модулей
+│   ├── deviceDiscovery.js # Обнаружение DLNA-устройств (SSDP)
+│   ├── dlnaServer.js      # DLNA Media Server (UPnP)
+│   ├── mediaRenderer.js   # Управление воспроизведением на устройствах
+│   ├── streamingServer.js # HTTP-стриминг с Range requests
+│   └── transcoder.js      # Транскодирование видео (ffmpeg)
+└── downloads/             # Каталог загрузки (создаётся автоматически)
 ```
 
 ## Технологии
@@ -92,6 +164,8 @@ WebTorrent/
 - [Express](https://expressjs.com/) — веб-фреймворк
 - [WebTorrent](https://webtorrent.io/) — торрент-клиент
 - [Multer](https://github.com/expressjs/multer) — загрузка файлов
+- [node-ssdp](https://github.com/nickvdp/node-ssdp) — обнаружение DLNA/UPnP устройств
+- [fluent-ffmpeg](https://github.com/fluent-ffmpeg/node-fluent-ffmpeg) — транскодирование видео
 - Server-Sent Events (SSE) — обновления в реальном времени
 
 ## Лицензия

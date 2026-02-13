@@ -24,6 +24,7 @@ const __dirname = path.dirname(__filename);
 const CONFIG_FILE = path.join(__dirname, 'config.json');
 let config = {
   server: { port: 3000 },
+  torrent: { port: 0 },
   dlna: { serverPort: 10293, serverName: 'WebTorrent Media Server', autoStart: false },
   downloads: { directory: './downloads' }
 };
@@ -39,7 +40,7 @@ if (fs.existsSync(CONFIG_FILE)) {
 }
 
 const app = express();
-const client = new WebTorrent();
+const client = new WebTorrent({ torrentPort: config.torrent.port || 0 });
 const PORT = process.env.PORT || config.server.port;
 const DLNA_PORT = config.dlna.serverPort;
 const DLNA_SERVER_NAME = config.dlna.serverName;
@@ -64,7 +65,11 @@ const dlnaServer = new DLNAServer(downloadDirectory, { port: DLNA_PORT, serverNa
 const transcoder = new Transcoder(downloadDirectory);
 
 // Запускаем обнаружение устройств
-deviceDiscovery.init();
+try {
+  deviceDiscovery.init();
+} catch (e) {
+  console.warn('Не удалось запустить обнаружение DLNA устройств:', e.message);
+}
 
 // Загрузка/сохранение пользователей
 function loadUsers() {
@@ -489,6 +494,9 @@ app.post('/api/settings/config', authMiddleware, (req, res) => {
     if (newConfig.server) {
       config.server = { ...config.server, ...newConfig.server };
     }
+    if (newConfig.torrent) {
+      config.torrent = { ...config.torrent, ...newConfig.torrent };
+    }
     if (newConfig.dlna) {
       config.dlna = { ...config.dlna, ...newConfig.dlna };
     }
@@ -538,8 +546,12 @@ app.get('/api/dlna/devices', authMiddleware, (req, res) => {
 
 // Запустить сканирование сети
 app.post('/api/dlna/devices/scan', authMiddleware, (req, res) => {
-  deviceDiscovery.scan();
-  res.json({ success: true, message: 'Сканирование запущено' });
+  try {
+    deviceDiscovery.scan();
+    res.json({ success: true, message: 'Сканирование запущено' });
+  } catch (e) {
+    res.status(503).json({ error: 'Не удалось запустить сканирование: ' + e.message });
+  }
 });
 
 // --- Media Renderer (Cast) ---

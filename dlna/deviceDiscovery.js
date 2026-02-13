@@ -25,7 +25,13 @@ class DeviceDiscovery extends EventEmitter {
    * Инициализация SSDP клиента
    */
   init() {
-    this.ssdpClient = new SSDPClient();
+    try {
+      this.ssdpClient = new SSDPClient();
+    } catch (err) {
+      console.warn('DLNA Discovery: не удалось создать SSDP клиент:', err.message);
+      this.ssdpClient = null;
+      return;
+    }
 
     this.ssdpClient.on('response', async (headers, statusCode, rinfo) => {
       if (statusCode === 200 && headers.LOCATION) {
@@ -199,12 +205,22 @@ class DeviceDiscovery extends EventEmitter {
 
     this.scanning = true;
 
-    // Ищем все MediaRenderer устройства
-    this.ssdpClient.search('urn:schemas-upnp-org:device:MediaRenderer:1');
+    try {
+      // Ищем все MediaRenderer устройства
+      this.ssdpClient.search('urn:schemas-upnp-org:device:MediaRenderer:1');
+    } catch (err) {
+      console.warn('DLNA Discovery: ошибка сканирования:', err.message);
+    }
 
     // Также ищем общий тип устройств
     setTimeout(() => {
-      this.ssdpClient.search('ssdp:all');
+      try {
+        if (this.ssdpClient) {
+          this.ssdpClient.search('ssdp:all');
+        }
+      } catch (err) {
+        console.warn('DLNA Discovery: ошибка сканирования ssdp:all:', err.message);
+      }
     }, 1000);
 
     // Сбрасываем флаг через 10 секунд

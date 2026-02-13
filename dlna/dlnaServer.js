@@ -456,7 +456,13 @@ ${items}
     this.ssdpServer.addUSN('urn:schemas-upnp-org:service:ContentDirectory:1');
     this.ssdpServer.addUSN('urn:schemas-upnp-org:service:ConnectionManager:1');
 
-    this.ssdpServer.start();
+    try {
+      await this.ssdpServer.start();
+    } catch (err) {
+      console.warn('DLNA Server: не удалось запустить SSDP анонсирование:', err.message);
+      console.warn('DLNA Server: HTTP сервер работает, но устройства не смогут обнаружить его автоматически');
+      this.ssdpServer = null;
+    }
 
     this.running = true;
     this.scanMediaFiles();
@@ -465,7 +471,8 @@ ${items}
       success: true,
       ip,
       port: this.port,
-      name: this.serverName
+      name: this.serverName,
+      ssdpActive: this.ssdpServer !== null
     };
   }
 
