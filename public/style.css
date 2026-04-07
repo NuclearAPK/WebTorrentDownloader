@@ -820,6 +820,34 @@ button:active {
   box-shadow: 0 5px 15px rgba(155, 89, 182, 0.3);
 }
 
+/* Footer */
+.app-footer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+  padding: 20px;
+  color: #555;
+  font-size: 0.85rem;
+}
+
+.app-footer #appVersion {
+  color: #00d9ff;
+}
+
+.github-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #555;
+  text-decoration: none;
+  transition: color 0.3s;
+}
+
+.github-link:hover {
+  color: #e4e4e4;
+}
+
 /* Responsive */
 @media (max-width: 600px) {
   .container {
