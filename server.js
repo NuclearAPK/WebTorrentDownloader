@@ -210,27 +210,41 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
 // SSE клиенты для прогресса
 const sseClients = new Set();
 
-// Отправка обновлений прогресса всем SSE клиентам
-function broadcastProgress() {
-  const torrents = client.torrents.map(torrent => ({
+// Формирование данных торрента для API/SSE
+function mapTorrentData(torrent) {
+  const selections = torrentFileSelections[torrent.infoHash];
+  const files = torrent.files?.map((f, i) => {
+    const selected = selections ? selections[i] : true;
+    return { name: f.name, length: f.length, progress: Math.round(f.progress * 100), selected };
+  }) || [];
+
+  const hasSelections = selections && !selections.every(s => s === false);
+  const selectedLength = hasSelections
+    ? files.reduce((sum, f) => f.selected ? sum + f.length : sum, 0)
+    : (torrent.length || 0);
+  const selectedDownloaded = hasSelections
+    ? torrent.files?.reduce((sum, f, i) => selections[i] ? sum + Math.round(f.progress * f.length) : sum, 0) || 0
+    : torrent.downloaded;
+
+  return {
     infoHash: torrent.infoHash,
     name: torrent.name || 'Загрузка метаданных...',
-    progress: Math.round(torrent.progress * 100),
+    progress: selectedLength > 0 ? Math.round((selectedDownloaded / selectedLength) * 100) : 0,
     downloadSpeed: torrent.downloadSpeed,
     uploadSpeed: torrent.uploadSpeed,
     numPeers: torrent.numPeers,
-    downloaded: torrent.downloaded,
-    length: torrent.length || 0,
+    downloaded: selectedDownloaded,
+    length: selectedLength,
     done: torrent.done,
     paused: torrent.paused || false,
-    awaitingFileSelection: torrentFileSelections[torrent.infoHash]?.every(s => s === false) || false,
-    files: torrent.files?.map((f, i) => ({
-      name: f.name,
-      length: f.length,
-      progress: Math.round(f.progress * 100),
-      selected: torrentFileSelections[torrent.infoHash] ? torrentFileSelections[torrent.infoHash][i] : true
-    })) || []
-  }));
+    awaitingFileSelection: selections?.every(s => s === false) || false,
+    files
+  };
+}
+
+// Отправка обновлений прогресса всем SSE клиентам
+function broadcastProgress() {
+  const torrents = client.torrents.map(mapTorrentData);
 
   const data = JSON.stringify(torrents);
   sseClients.forEach(client => {
@@ -363,27 +377,7 @@ app.post('/api/download/file', authMiddleware, upload.single('torrentFile'), (re
 
 // Список активных торрентов
 app.get('/api/torrents', authMiddleware, (req, res) => {
-  const torrents = client.torrents.map(torrent => ({
-    infoHash: torrent.infoHash,
-    name: torrent.name || 'Загрузка метаданных...',
-    progress: Math.round(torrent.progress * 100),
-    downloadSpeed: torrent.downloadSpeed,
-    uploadSpeed: torrent.uploadSpeed,
-    numPeers: torrent.numPeers,
-    downloaded: torrent.downloaded,
-    length: torrent.length || 0,
-    done: torrent.done,
-    paused: torrent.paused || false,
-    awaitingFileSelection: torrentFileSelections[torrent.infoHash]?.every(s => s === false) || false,
-    files: torrent.files?.map((f, i) => ({
-      name: f.name,
-      length: f.length,
-      progress: Math.round(f.progress * 100),
-      selected: torrentFileSelections[torrent.infoHash] ? torrentFileSelections[torrent.infoHash][i] : true
-    })) || []
-  }));
-
-  res.json(torrents);
+  res.json(client.torrents.map(mapTorrentData));
 });
 
 // Удалить торрент
@@ -454,8 +448,18 @@ app.post('/api/torrents/:infoHash/select-files', authMiddleware, async (req, res
   res.json({ success: true, message: 'Выбор файлов обновлён' });
 });
 
-// Список скачанных файлов
+// Список скачанных файлов (исключая файлы активных незавершённых торрентов)
 app.get('/api/files', authMiddleware, (req, res) => {
+  // Собираем абсолютные пути файлов активных незавершённых торрентов
+  const activeTorrentFiles = new Set();
+  client.torrents.forEach(torrent => {
+    if (!torrent.done && torrent.files) {
+      torrent.files.forEach(f => {
+        activeTorrentFiles.add(path.normalize(path.join(downloadDirectory, f.path)));
+      });
+    }
+  });
+
   fs.readdir(downloadDirectory, { withFileTypes: true }, (err, entries) => {
     if (err) {
       return res.status(500).json({ error: err.message });
@@ -475,6 +479,9 @@ app.get('/api/files', authMiddleware, (req, res) => {
           // Игнорируем ошибки доступа
         }
       } else {
+        // Пропускаем файлы, принадлежащие активным незавершённым торрентам
+        if (activeTorrentFiles.has(path.normalize(fullPath))) return;
+
         try {
           const stats = fs.statSync(fullPath);
           files.push({
