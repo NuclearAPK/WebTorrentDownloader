@@ -285,10 +285,14 @@ app.post('/api/download/magnet', authMiddleware, (req, res) => {
 
     torrent.on('metadata', () => {
       console.log(`Метаданные получены: ${torrent.name}`);
-      // Для многофайловых торрентов отключаем загрузку всех файлов до выбора пользователя
+    });
+
+    // ready срабатывает ПОСЛЕ авто-select всех файлов — здесь deselect гарантированно отменит загрузку
+    torrent.on('ready', () => {
       if (torrent.files.length > 1) {
         torrent.files.forEach(f => f.deselect());
         torrentFileSelections[torrent.infoHash] = torrent.files.map(() => false);
+        console.log(`Многофайловый торрент — ожидание выбора файлов: ${torrent.name}`);
       }
     });
 
@@ -323,10 +327,13 @@ app.post('/api/download/file', authMiddleware, upload.single('torrentFile'), (re
     torrent.on('metadata', () => {
       console.log(`Метаданные получены: ${torrent.name}`);
       fs.unlink(torrentPath, () => {});
-      // Для многофайловых торрентов отключаем загрузку всех файлов до выбора пользователя
+    });
+
+    torrent.on('ready', () => {
       if (torrent.files.length > 1) {
         torrent.files.forEach(f => f.deselect());
         torrentFileSelections[torrent.infoHash] = torrent.files.map(() => false);
+        console.log(`Многофайловый торрент — ожидание выбора файлов: ${torrent.name}`);
       }
     });
 
