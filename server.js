@@ -389,7 +389,7 @@ app.get('/api/torrents', authMiddleware, (req, res) => {
 // Удалить торрент
 app.delete('/api/torrents/:infoHash', authMiddleware, async (req, res) => {
   const { infoHash } = req.params;
-  const torrent = client.get(infoHash);
+  const torrent = await client.get(infoHash);
 
   if (!torrent) {
     return res.status(404).json({ error: 'Торрент не найден' });
@@ -405,24 +405,24 @@ app.delete('/api/torrents/:infoHash', authMiddleware, async (req, res) => {
 });
 
 // Пауза торрента
-app.post('/api/torrents/:infoHash/pause', authMiddleware, (req, res) => {
-  const torrent = client.get(req.params.infoHash);
+app.post('/api/torrents/:infoHash/pause', authMiddleware, async (req, res) => {
+  const torrent = await client.get(req.params.infoHash);
   if (!torrent) return res.status(404).json({ error: 'Торрент не найден' });
   torrent.pause();
   res.json({ success: true, message: 'Торрент приостановлен' });
 });
 
 // Возобновление торрента
-app.post('/api/torrents/:infoHash/resume', authMiddleware, (req, res) => {
-  const torrent = client.get(req.params.infoHash);
+app.post('/api/torrents/:infoHash/resume', authMiddleware, async (req, res) => {
+  const torrent = await client.get(req.params.infoHash);
   if (!torrent) return res.status(404).json({ error: 'Торрент не найден' });
   torrent.resume();
   res.json({ success: true, message: 'Торрент возобновлён' });
 });
 
 // Выбор файлов для скачивания
-app.post('/api/torrents/:infoHash/select-files', authMiddleware, (req, res) => {
-  const torrent = client.get(req.params.infoHash);
+app.post('/api/torrents/:infoHash/select-files', authMiddleware, async (req, res) => {
+  const torrent = await client.get(req.params.infoHash);
   if (!torrent) return res.status(404).json({ error: 'Торрент не найден' });
   if (!torrent.files || torrent.files.length === 0) {
     return res.status(400).json({ error: 'Метаданные торрента ещё не получены' });
