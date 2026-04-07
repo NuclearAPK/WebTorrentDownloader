@@ -41,6 +41,12 @@ const stopBtn = document.getElementById('stopBtn');
 // Интервал обновления статуса воспроизведения
 let playbackStatusInterval = null;
 
+// Трекинг торрентов для автоматического показа выбора файлов
+const seenTorrentFiles = new Set();
+
+// Последние данные торрентов из SSE (для доступа из UI)
+let lastTorrentsData = [];
+
 // API запрос с авторизацией
 async function apiRequest(url, options = {}) {
   const headers = options.headers || {};
@@ -319,6 +325,122 @@ async function removeTorrent(infoHash) {
   }
 }
 
+// Пауза торрента
+async function pauseTorrent(infoHash) {
+  try {
+    const response = await apiRequest(`/api/torrents/${infoHash}/pause`, { method: 'POST' });
+    const data = await response.json();
+    if (response.ok) {
+      showNotification('Торрент приостановлен', 'info');
+    } else {
+      showNotification(data.error, 'error');
+    }
+  } catch (error) {
+    showNotification('Ошибка приостановки торрента', 'error');
+  }
+}
+
+// Возобновление торрента
+async function resumeTorrent(infoHash) {
+  try {
+    const response = await apiRequest(`/api/torrents/${infoHash}/resume`, { method: 'POST' });
+    const data = await response.json();
+    if (response.ok) {
+      showNotification('Торрент возобновлён', 'success');
+    } else {
+      showNotification(data.error, 'error');
+    }
+  } catch (error) {
+    showNotification('Ошибка возобновления торрента', 'error');
+  }
+}
+
+// Выбор файлов торрента
+async function selectTorrentFiles(infoHash, selectedFiles) {
+  try {
+    const response = await apiRequest(`/api/torrents/${infoHash}/select-files`, {
+      method: 'POST',
+      body: JSON.stringify({ selectedFiles })
+    });
+    const data = await response.json();
+    if (response.ok) {
+      showNotification('Выбор файлов обновлён', 'success');
+    } else {
+      showNotification(data.error, 'error');
+    }
+  } catch (error) {
+    showNotification('Ошибка выбора файлов', 'error');
+  }
+}
+
+// Открыть выбор файлов по infoHash (из кнопки в UI)
+function showFileSelectionForHash(infoHash) {
+  const torrent = lastTorrentsData.find(t => t.infoHash === infoHash);
+  if (torrent) showFileSelectionModal(torrent);
+}
+
+// Модальное окно выбора файлов торрента
+function showFileSelectionModal(torrent) {
+  const modal = document.createElement('div');
+  modal.className = 'cast-modal';
+  modal.innerHTML = `
+    <div class="cast-modal-content file-select-modal">
+      <h3>Выберите файлы для скачивания</h3>
+      <p class="file-select-torrent-name">${escapeHtml(torrent.name)}</p>
+      <div class="file-select-actions-top">
+        <button class="btn-small btn-secondary" id="fileSelectAll">Выбрать все</button>
+        <button class="btn-small btn-secondary" id="fileDeselectAll">Снять все</button>
+      </div>
+      <div class="file-select-list">
+        ${torrent.files.map((file, index) => `
+          <label class="file-select-item">
+            <input type="checkbox" value="${index}" ${file.selected !== false ? 'checked' : ''}>
+            <span class="file-select-name">${escapeHtml(file.name)}</span>
+            <span class="file-select-size">${formatBytes(file.length)}</span>
+          </label>
+        `).join('')}
+      </div>
+      <div class="file-select-footer">
+        <button class="btn-primary" id="fileSelectConfirm">Скачать выбранные</button>
+        <button class="btn-secondary cast-modal-close">Скачать все</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  const checkboxes = modal.querySelectorAll('input[type="checkbox"]');
+
+  modal.querySelector('#fileSelectAll').addEventListener('click', () => {
+    checkboxes.forEach(cb => cb.checked = true);
+  });
+
+  modal.querySelector('#fileDeselectAll').addEventListener('click', () => {
+    checkboxes.forEach(cb => cb.checked = false);
+  });
+
+  modal.querySelector('#fileSelectConfirm').addEventListener('click', () => {
+    const selected = [];
+    checkboxes.forEach(cb => {
+      if (cb.checked) selected.push(parseInt(cb.value));
+    });
+    if (selected.length === 0) {
+      showNotification('Выберите хотя бы один файл', 'error');
+      return;
+    }
+    selectTorrentFiles(torrent.infoHash, selected);
+    modal.remove();
+  });
+
+  modal.querySelector('.cast-modal-close').addEventListener('click', () => {
+    modal.remove();
+  });
+
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.remove();
+  });
+}
+
 // Отрисовка списка торрентов
 function renderTorrents(torrents) {
   if (torrents.length === 0) {
@@ -327,15 +449,20 @@ function renderTorrents(torrents) {
   }
 
   torrentsList.innerHTML = torrents.map(torrent => `
-    <div class="torrent-item ${torrent.done ? 'torrent-done' : ''}">
+    <div class="torrent-item ${torrent.done ? 'torrent-done' : ''} ${torrent.paused ? 'torrent-paused' : ''}">
       <div class="torrent-header">
-        <span class="torrent-name">${escapeHtml(torrent.name)}</span>
+        <span class="torrent-name">${escapeHtml(torrent.name)}${torrent.paused ? ' <span class="torrent-paused-badge">На паузе</span>' : ''}</span>
         <div class="torrent-actions">
+          ${!torrent.done ? (torrent.paused
+            ? `<button class="btn-resume" onclick="resumeTorrent('${torrent.infoHash}')">Продолжить</button>`
+            : `<button class="btn-pause" onclick="pauseTorrent('${torrent.infoHash}')">Пауза</button>`
+          ) : ''}
+          ${torrent.files.length > 1 && !torrent.done ? `<button class="btn-secondary btn-small" onclick="showFileSelectionForHash('${torrent.infoHash}')">Файлы</button>` : ''}
           <button class="btn-danger" onclick="removeTorrent('${torrent.infoHash}')">Удалить</button>
         </div>
       </div>
       <div class="progress-container">
-        <div class="progress-bar" style="width: ${torrent.progress}%">
+        <div class="progress-bar ${torrent.paused ? 'progress-bar-paused' : ''}" style="width: ${torrent.progress}%">
           ${torrent.progress}%
         </div>
       </div>
@@ -350,9 +477,10 @@ function renderTorrents(torrents) {
           <button class="torrent-files-toggle" onclick="toggleFiles(this)">Показать файлы (${torrent.files.length})</button>
           <div class="torrent-files-list" style="display: none;">
             ${torrent.files.map((file, index) => `
-              <div class="torrent-file">
+              <div class="torrent-file ${!file.selected ? 'torrent-file-deselected' : ''}">
                 <span class="torrent-file-name">${escapeHtml(file.name)}</span>
-                <span class="torrent-file-progress">${file.progress}%</span>
+                <span class="torrent-file-size">${formatBytes(file.length)}</span>
+                <span class="torrent-file-progress">${file.selected ? file.progress + '%' : 'Пропущен'}</span>
                 ${isMediaFile(file.name) ? `<button class="btn-cast btn-small" onclick="showCastModal(null, {infoHash: '${torrent.infoHash}', fileIndex: ${index}})">Cast</button>` : ''}
               </div>
             `).join('')}
@@ -724,7 +852,16 @@ function connectSSE() {
 
   eventSource.onmessage = (event) => {
     const torrents = JSON.parse(event.data);
+    lastTorrentsData = torrents;
     renderTorrents(torrents);
+
+    // Автоматически показать выбор файлов для новых многофайловых торрентов
+    torrents.forEach(torrent => {
+      if (torrent.files.length > 1 && !seenTorrentFiles.has(torrent.infoHash) && !torrent.done) {
+        seenTorrentFiles.add(torrent.infoHash);
+        showFileSelectionModal(torrent);
+      }
+    });
   };
 
   eventSource.onerror = () => {

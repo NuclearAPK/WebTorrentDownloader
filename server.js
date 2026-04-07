@@ -57,6 +57,9 @@ if (!fs.existsSync(downloadDirectory)) {
   fs.mkdirSync(downloadDirectory, { recursive: true });
 }
 
+// Трекинг выбора файлов: infoHash -> массив boolean (true = выбран)
+const torrentFileSelections = {};
+
 // Инициализация DLNA модулей
 const streamingServer = new StreamingServer(downloadDirectory, client);
 const deviceDiscovery = new DeviceDiscovery();
@@ -219,10 +222,12 @@ function broadcastProgress() {
     downloaded: torrent.downloaded,
     length: torrent.length || 0,
     done: torrent.done,
-    files: torrent.files?.map(f => ({
+    paused: torrent.paused || false,
+    files: torrent.files?.map((f, i) => ({
       name: f.name,
       length: f.length,
-      progress: Math.round(f.progress * 100)
+      progress: Math.round(f.progress * 100),
+      selected: torrentFileSelections[torrent.infoHash] ? torrentFileSelections[torrent.infoHash][i] : true
     })) || []
   }));
 
@@ -349,11 +354,12 @@ app.get('/api/torrents', authMiddleware, (req, res) => {
     downloaded: torrent.downloaded,
     length: torrent.length || 0,
     done: torrent.done,
-    paused: torrent.paused,
-    files: torrent.files?.map(f => ({
+    paused: torrent.paused || false,
+    files: torrent.files?.map((f, i) => ({
       name: f.name,
       length: f.length,
-      progress: Math.round(f.progress * 100)
+      progress: Math.round(f.progress * 100),
+      selected: torrentFileSelections[torrent.infoHash] ? torrentFileSelections[torrent.infoHash][i] : true
     })) || []
   }));
 
@@ -370,11 +376,56 @@ app.delete('/api/torrents/:infoHash', authMiddleware, async (req, res) => {
   }
 
   try {
+    delete torrentFileSelections[infoHash];
     await client.remove(infoHash, { destroyStore: false });
     res.json({ success: true, message: 'Торрент удалён' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// Пауза торрента
+app.post('/api/torrents/:infoHash/pause', authMiddleware, (req, res) => {
+  const torrent = client.get(req.params.infoHash);
+  if (!torrent) return res.status(404).json({ error: 'Торрент не найден' });
+  torrent.pause();
+  res.json({ success: true, message: 'Торрент приостановлен' });
+});
+
+// Возобновление торрента
+app.post('/api/torrents/:infoHash/resume', authMiddleware, (req, res) => {
+  const torrent = client.get(req.params.infoHash);
+  if (!torrent) return res.status(404).json({ error: 'Торрент не найден' });
+  torrent.resume();
+  res.json({ success: true, message: 'Торрент возобновлён' });
+});
+
+// Выбор файлов для скачивания
+app.post('/api/torrents/:infoHash/select-files', authMiddleware, (req, res) => {
+  const torrent = client.get(req.params.infoHash);
+  if (!torrent) return res.status(404).json({ error: 'Торрент не найден' });
+  if (!torrent.files || torrent.files.length === 0) {
+    return res.status(400).json({ error: 'Метаданные торрента ещё не получены' });
+  }
+
+  const { selectedFiles } = req.body;
+  if (!Array.isArray(selectedFiles)) {
+    return res.status(400).json({ error: 'selectedFiles должен быть массивом индексов' });
+  }
+
+  const selections = [];
+  torrent.files.forEach((file, index) => {
+    const selected = selectedFiles.includes(index);
+    selections.push(selected);
+    if (selected) {
+      file.select();
+    } else {
+      file.deselect();
+    }
+  });
+
+  torrentFileSelections[torrent.infoHash] = selections;
+  res.json({ success: true, message: 'Выбор файлов обновлён' });
 });
 
 // Список скачанных файлов

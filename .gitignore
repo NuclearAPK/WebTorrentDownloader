@@ -24,6 +24,9 @@ nul
 *.swp
 *.swo
 
+# Claude
+CLAUDE.md
+
 # Переменные окружения
 .env
 .env.local
