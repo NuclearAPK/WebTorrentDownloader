@@ -402,7 +402,7 @@ function showFileSelectionModal(torrent) {
       </div>
       <div class="file-select-footer">
         <button class="btn-primary" id="fileSelectConfirm">Скачать выбранные</button>
-        <button class="btn-secondary cast-modal-close">Скачать все</button>
+        <button class="btn-secondary" id="fileSelectAll2">Скачать все</button>
       </div>
     </div>
   `;
@@ -432,7 +432,9 @@ function showFileSelectionModal(torrent) {
     modal.remove();
   });
 
-  modal.querySelector('.cast-modal-close').addEventListener('click', () => {
+  modal.querySelector('#fileSelectAll2').addEventListener('click', () => {
+    const allIndices = torrent.files.map((_, i) => i);
+    selectTorrentFiles(torrent.infoHash, allIndices);
     modal.remove();
   });
 
