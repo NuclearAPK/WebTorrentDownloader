@@ -223,6 +223,7 @@ function broadcastProgress() {
     length: torrent.length || 0,
     done: torrent.done,
     paused: torrent.paused || false,
+    awaitingFileSelection: torrentFileSelections[torrent.infoHash]?.every(s => s === false) || false,
     files: torrent.files?.map((f, i) => ({
       name: f.name,
       length: f.length,
@@ -281,19 +282,18 @@ app.post('/api/download/magnet', authMiddleware, (req, res) => {
   }
 
   try {
-    const torrent = client.add(magnetUri, { path: downloadDirectory });
-
-    torrent.on('metadata', () => {
-      console.log(`Метаданные получены: ${torrent.name}`);
-    });
+    // deselect: true — не качать данные до явного выбора файлов пользователем
+    const torrent = client.add(magnetUri, { path: downloadDirectory, deselect: true });
 
     torrent.on('ready', () => {
       if (torrent.files.length > 1) {
-        // Паузим торрент и снимаем выбор со всех файлов до подтверждения пользователем
-        torrent.pause();
-        torrent.files.forEach(f => f.deselect());
+        // Многофайловый — ждём выбора пользователя
         torrentFileSelections[torrent.infoHash] = torrent.files.map(() => false);
-        console.log(`Многофайловый торрент — приостановлен, ожидание выбора файлов: ${torrent.name}`);
+        console.log(`Многофайловый торрент — ожидание выбора файлов: ${torrent.name}`);
+      } else {
+        // Однофайловый — сразу начинаем загрузку
+        torrent.files[0].select();
+        console.log(`Загрузка начата: ${torrent.name}`);
       }
     });
 
@@ -323,19 +323,19 @@ app.post('/api/download/file', authMiddleware, upload.single('torrentFile'), (re
 
   try {
     const torrentPath = req.file.path;
-    const torrent = client.add(torrentPath, { path: downloadDirectory });
+    const torrent = client.add(torrentPath, { path: downloadDirectory, deselect: true });
 
     torrent.on('metadata', () => {
-      console.log(`Метаданные получены: ${torrent.name}`);
       fs.unlink(torrentPath, () => {});
     });
 
     torrent.on('ready', () => {
       if (torrent.files.length > 1) {
-        torrent.pause();
-        torrent.files.forEach(f => f.deselect());
         torrentFileSelections[torrent.infoHash] = torrent.files.map(() => false);
-        console.log(`Многофайловый торрент — приостановлен, ожидание выбора файлов: ${torrent.name}`);
+        console.log(`Многофайловый торрент — ожидание выбора файлов: ${torrent.name}`);
+      } else {
+        torrent.files[0].select();
+        console.log(`Загрузка начата: ${torrent.name}`);
       }
     });
 
@@ -374,6 +374,7 @@ app.get('/api/torrents', authMiddleware, (req, res) => {
     length: torrent.length || 0,
     done: torrent.done,
     paused: torrent.paused || false,
+    awaitingFileSelection: torrentFileSelections[torrent.infoHash]?.every(s => s === false) || false,
     files: torrent.files?.map((f, i) => ({
       name: f.name,
       length: f.length,

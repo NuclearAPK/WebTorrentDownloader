@@ -454,11 +454,11 @@ function renderTorrents(torrents) {
   }
 
   torrentsList.innerHTML = torrents.map(torrent => `
-    <div class="torrent-item ${torrent.done ? 'torrent-done' : ''} ${torrent.paused ? 'torrent-paused' : ''}">
+    <div class="torrent-item ${torrent.done ? 'torrent-done' : ''} ${torrent.paused ? 'torrent-paused' : ''} ${torrent.awaitingFileSelection ? 'torrent-awaiting' : ''}">
       <div class="torrent-header">
-        <span class="torrent-name">${escapeHtml(torrent.name)}${torrent.paused ? ' <span class="torrent-paused-badge">На паузе</span>' : ''}</span>
+        <span class="torrent-name">${escapeHtml(torrent.name)}${torrent.paused && !torrent.awaitingFileSelection ? ' <span class="torrent-paused-badge">На паузе</span>' : ''}${torrent.awaitingFileSelection ? ' <span class="torrent-awaiting-badge">Ожидание выбора файлов</span>' : ''}</span>
         <div class="torrent-actions">
-          ${!torrent.done ? (torrent.paused
+          ${!torrent.done && !torrent.awaitingFileSelection ? (torrent.paused
             ? `<button class="btn-resume" onclick="resumeTorrent('${torrent.infoHash}')">Продолжить</button>`
             : `<button class="btn-pause" onclick="pauseTorrent('${torrent.infoHash}')">Пауза</button>`
           ) : ''}
@@ -466,6 +466,9 @@ function renderTorrents(torrents) {
           <button class="btn-danger" onclick="removeTorrent('${torrent.infoHash}')">Удалить</button>
         </div>
       </div>
+      ${torrent.awaitingFileSelection ? `
+      <div class="torrent-awaiting-message">Выберите файлы для скачивания, нажав кнопку «Файлы»</div>
+      ` : `
       <div class="progress-container">
         <div class="progress-bar ${torrent.paused ? 'progress-bar-paused' : ''}" style="width: ${torrent.progress}%">
           ${torrent.progress}%
@@ -477,6 +480,7 @@ function renderTorrents(torrents) {
         <span>Отдача: <span class="stat-value">${formatSpeed(torrent.uploadSpeed)}</span></span>
         <span>Пиры: <span class="stat-value">${torrent.numPeers}</span></span>
       </div>
+      `}
       ${torrent.files.length > 0 ? `
         <div class="torrent-files">
           <button class="torrent-files-toggle" onclick="toggleFiles(this)">Показать файлы (${torrent.files.length})</button>

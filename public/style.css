@@ -376,6 +376,23 @@ button:active {
   box-shadow: 0 5px 15px rgba(0, 255, 136, 0.3);
 }
 
+.torrent-awaiting {
+  border-color: rgba(0, 217, 255, 0.3);
+}
+
+.torrent-awaiting-badge {
+  font-size: 0.75rem;
+  color: #00d9ff;
+  font-weight: 400;
+  margin-left: 8px;
+}
+
+.torrent-awaiting-message {
+  color: #a0a0a0;
+  font-size: 0.85rem;
+  padding: 8px 0;
+}
+
 /* Список файлов */
 .file-item {
   display: flex;

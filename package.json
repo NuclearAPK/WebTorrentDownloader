@@ -1,6 +1,6 @@
 {
   "name": "webtorrent-downloader",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Web-приложение для скачивания торрентов",
   "main": "server.js",
   "type": "module",
