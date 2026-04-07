@@ -450,12 +450,16 @@ app.post('/api/torrents/:infoHash/select-files', authMiddleware, async (req, res
 
 // Список скачанных файлов (исключая файлы активных незавершённых торрентов)
 app.get('/api/files', authMiddleware, (req, res) => {
-  // Собираем абсолютные пути файлов активных незавершённых торрентов
-  const activeTorrentFiles = new Set();
+  // Собираем пути невыбранных файлов активных торрентов (sparse-заглушки от chunk store)
+  const deselectedTorrentFiles = new Set();
   client.torrents.forEach(torrent => {
     if (!torrent.done && torrent.files) {
-      torrent.files.forEach(f => {
-        activeTorrentFiles.add(path.normalize(path.join(downloadDirectory, f.path)));
+      const selections = torrentFileSelections[torrent.infoHash];
+      torrent.files.forEach((f, i) => {
+        const selected = selections ? selections[i] : true;
+        if (!selected) {
+          deselectedTorrentFiles.add(path.normalize(path.join(downloadDirectory, f.path)));
+        }
       });
     }
   });
@@ -479,8 +483,8 @@ app.get('/api/files', authMiddleware, (req, res) => {
           // Игнорируем ошибки доступа
         }
       } else {
-        // Пропускаем файлы, принадлежащие активным незавершённым торрентам
-        if (activeTorrentFiles.has(path.normalize(fullPath))) return;
+        // Пропускаем невыбранные файлы активных торрентов (sparse-заглушки)
+        if (deselectedTorrentFiles.has(path.normalize(fullPath))) return;
 
         try {
           const stats = fs.statSync(fullPath);
