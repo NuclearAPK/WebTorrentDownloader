@@ -392,9 +392,12 @@ function showFileSelectionModal(torrent) {
         <button class="btn-small btn-secondary" id="fileDeselectAll">Снять все</button>
       </div>
       <div class="file-select-list">
-        ${torrent.files.map((file, index) => `
+        ${torrent.files
+          .map((file, index) => ({ ...file, originalIndex: index }))
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map(file => `
           <label class="file-select-item">
-            <input type="checkbox" value="${index}" ${file.selected !== false ? 'checked' : ''}>
+            <input type="checkbox" value="${file.originalIndex}" ${file.selected !== false ? 'checked' : ''}>
             <span class="file-select-name">${escapeHtml(file.name)}</span>
             <span class="file-select-size">${formatBytes(file.length)}</span>
           </label>

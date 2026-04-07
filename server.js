@@ -287,12 +287,13 @@ app.post('/api/download/magnet', authMiddleware, (req, res) => {
       console.log(`Метаданные получены: ${torrent.name}`);
     });
 
-    // ready срабатывает ПОСЛЕ авто-select всех файлов — здесь deselect гарантированно отменит загрузку
     torrent.on('ready', () => {
       if (torrent.files.length > 1) {
+        // Паузим торрент и снимаем выбор со всех файлов до подтверждения пользователем
+        torrent.pause();
         torrent.files.forEach(f => f.deselect());
         torrentFileSelections[torrent.infoHash] = torrent.files.map(() => false);
-        console.log(`Многофайловый торрент — ожидание выбора файлов: ${torrent.name}`);
+        console.log(`Многофайловый торрент — приостановлен, ожидание выбора файлов: ${torrent.name}`);
       }
     });
 
@@ -331,9 +332,10 @@ app.post('/api/download/file', authMiddleware, upload.single('torrentFile'), (re
 
     torrent.on('ready', () => {
       if (torrent.files.length > 1) {
+        torrent.pause();
         torrent.files.forEach(f => f.deselect());
         torrentFileSelections[torrent.infoHash] = torrent.files.map(() => false);
-        console.log(`Многофайловый торрент — ожидание выбора файлов: ${torrent.name}`);
+        console.log(`Многофайловый торрент — приостановлен, ожидание выбора файлов: ${torrent.name}`);
       }
     });
 
@@ -442,6 +444,12 @@ app.post('/api/torrents/:infoHash/select-files', authMiddleware, (req, res) => {
   });
 
   torrentFileSelections[torrent.infoHash] = selections;
+
+  // Возобновляем торрент если он был приостановлен при ожидании выбора файлов
+  if (torrent.paused) {
+    torrent.resume();
+  }
+
   res.json({ success: true, message: 'Выбор файлов обновлён' });
 });
 
