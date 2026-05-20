@@ -901,3 +901,77 @@ button:active {
     width: 100%;
   }
 }
+
+/* === Онлайн-просмотр видео === */
+
+.watch-section {
+  padding: 20px 0;
+}
+
+.watch-header {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.watch-title {
+  flex: 1;
+  color: #00d9ff;
+  font-size: 1.2rem;
+  margin: 0;
+  word-break: break-all;
+  min-width: 0;
+}
+
+.watch-quality {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #a0a0a0;
+}
+
+.watch-quality select {
+  background: #16213e;
+  border: 1px solid #00d9ff;
+  color: #e4e4e4;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+#watchPlayer {
+  width: 100%;
+  max-height: calc(100vh - 240px);
+  background: #000;
+  border-radius: 6px;
+  outline: none;
+}
+
+.watch-status {
+  margin-top: 12px;
+  padding: 10px;
+  color: #a0a0a0;
+  font-size: 0.9rem;
+  min-height: 1.2em;
+}
+
+.watch-status.error {
+  color: #ff6b6b;
+}
+
+.btn-watch {
+  background: transparent;
+  border: 1px solid #00d9ff;
+  color: #00d9ff;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn-watch:hover {
+  background: rgba(0, 217, 255, 0.1);
+}
