@@ -691,6 +691,25 @@ window.openWatchTorrent = function(infoHash, fileIndex) {
   openWatch({ type: 'torrent', infoHash, fileIndex: Number(fileIndex) });
 };
 
+async function changeQuality() {
+  if (!currentWatch) return;
+
+  const savedTime = watchPlayer.currentTime;
+  const wasPlaying = !watchPlayer.paused;
+
+  await openWatch(currentWatch);
+
+  const restoreTime = () => {
+    if (savedTime > 5) {
+      watchPlayer.currentTime = savedTime;
+    }
+    if (wasPlaying) {
+      watchPlayer.play().catch(() => {});
+    }
+  };
+  watchPlayer.addEventListener('loadedmetadata', restoreTime, { once: true });
+}
+
 // === DLNA функции ===
 
 // Форматирование времени
@@ -1035,6 +1054,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Watch обработчики
   watchBack.addEventListener('click', closeWatch);
+  qualitySelect.addEventListener('change', changeQuality);
 
   watchPlayer.addEventListener('pause', () => {
     if (currentWatch && watchPlayer.currentTime > 5) {
