@@ -646,6 +646,10 @@ async function openWatch(ctx) {
 
     watchTitle.textContent = data.title;
     watchPlayer.src = data.url;
+    qualitySelect.disabled = !data.isTranscoding;
+    qualitySelect.title = data.isTranscoding
+      ? ''
+      : 'Файл воспроизводится в оригинальном качестве (транскод не требуется)';
     setView('watch');
 
     const savedPos = parseFloat(localStorage.getItem(watchPosKey(ctx)));

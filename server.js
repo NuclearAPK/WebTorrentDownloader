@@ -730,10 +730,10 @@ app.post('/api/watch/resolve', authMiddleware, async (req, res) => {
         return res.status(404).json({ error: 'Файл не найден' });
       }
 
-      const needsTranscoding = transcoder.needsTranscoding(filename);
-      const forceTranscoding = requestedQuality !== 'original' && requestedQuality !== undefined;
-
-      if (needsTranscoding || forceTranscoding) {
+      // Транскод только для форматов, которые транскодер реально умеет обрабатывать.
+      // Для нативных mp4/webm всегда прямой стрим — выбор качества для них игнорируется,
+      // потому что transcoder возвращает 400 на любой другой формат.
+      if (transcoder.needsTranscoding(filename)) {
         url = transcoder.getTranscodeUrl(filename, host, requestedQuality);
         mimeType = 'video/mp4';
         isTranscoding = true;
