@@ -147,6 +147,25 @@
           </div>
         </div>
       </section>
+
+      <!-- Онлайн-просмотр видео -->
+      <section id="watchSection" class="watch-section" style="display: none;">
+        <header class="watch-header">
+          <button id="watchBack" class="btn-secondary">← К списку</button>
+          <h2 id="watchTitle" class="watch-title"></h2>
+          <div class="watch-quality">
+            <label for="qualitySelect">Качество:</label>
+            <select id="qualitySelect">
+              <option value="original">Оригинал</option>
+              <option value="high">Высокое (1080p)</option>
+              <option value="medium" selected>Среднее (720p)</option>
+              <option value="low">Низкое (480p)</option>
+            </select>
+          </div>
+        </header>
+        <video id="watchPlayer" controls preload="metadata"></video>
+        <div id="watchStatus" class="watch-status"></div>
+      </section>
     </main>
   </section>
 
