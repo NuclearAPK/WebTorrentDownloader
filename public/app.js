@@ -38,6 +38,17 @@ const playBtn = document.getElementById('playBtn');
 const pauseBtn = document.getElementById('pauseBtn');
 const stopBtn = document.getElementById('stopBtn');
 
+// Watch (онлайн-просмотр) элементы
+const watchSection = document.getElementById('watchSection');
+const watchBack = document.getElementById('watchBack');
+const watchTitle = document.getElementById('watchTitle');
+const watchPlayer = document.getElementById('watchPlayer');
+const watchStatus = document.getElementById('watchStatus');
+const qualitySelect = document.getElementById('qualitySelect');
+
+// Текущий контекст просмотра (file или torrent)
+let currentWatch = null;
+
 // Интервал обновления статуса воспроизведения
 let playbackStatusInterval = null;
 
@@ -582,6 +593,95 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+// === Онлайн-просмотр видео ===
+
+function watchPosKey(ctx) {
+  if (ctx.type === 'torrent') return `watch:pos:torrent:${ctx.infoHash}:${ctx.fileIndex}`;
+  return `watch:pos:file:${ctx.filename}`;
+}
+
+function setView(view) {
+  const mainElements = appSection.querySelectorAll('main > section:not(#watchSection)');
+  if (view === 'watch') {
+    mainElements.forEach(el => el.style.display = 'none');
+    watchSection.style.display = 'block';
+  } else {
+    mainElements.forEach(el => el.style.display = '');
+    watchSection.style.display = 'none';
+  }
+}
+
+async function openWatch(ctx) {
+  currentWatch = ctx;
+  watchStatus.textContent = 'Загрузка...';
+  watchStatus.classList.remove('error');
+  watchTitle.textContent = '';
+
+  const quality = qualitySelect.value || 'medium';
+
+  try {
+    const body = ctx.type === 'torrent'
+      ? { type: 'torrent', infoHash: ctx.infoHash, fileIndex: ctx.fileIndex, quality }
+      : { type: 'file', filename: ctx.filename, quality };
+
+    const response = await apiRequest('/api/watch/resolve', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Не удалось получить URL стрима');
+    }
+
+    watchTitle.textContent = data.title;
+    watchPlayer.src = data.url;
+    setView('watch');
+
+    const savedPos = parseFloat(localStorage.getItem(watchPosKey(ctx)));
+    if (savedPos && !isNaN(savedPos) && savedPos > 5) {
+      const restorePos = () => {
+        if (data.duration && savedPos < data.duration - 30) {
+          watchPlayer.currentTime = savedPos;
+          showNotification(`Продолжаем с ${formatTime(savedPos)}`, 'success');
+        }
+      };
+      watchPlayer.addEventListener('loadedmetadata', restorePos, { once: true });
+    }
+
+    watchStatus.textContent = data.isTranscoding
+      ? 'Транскодирование в реальном времени (перемотка ограничена)'
+      : '';
+
+    watchPlayer.play().catch(() => {
+      // Autoplay может быть запрещён браузером — игнорируем
+    });
+  } catch (error) {
+    watchStatus.textContent = 'Ошибка: ' + error.message;
+    watchStatus.classList.add('error');
+    setView('watch');
+  }
+}
+
+function closeWatch() {
+  if (currentWatch && watchPlayer.currentTime > 5) {
+    localStorage.setItem(watchPosKey(currentWatch), String(watchPlayer.currentTime));
+  }
+  watchPlayer.pause();
+  watchPlayer.removeAttribute('src');
+  watchPlayer.load();
+  currentWatch = null;
+  setView('library');
+}
+
+window.openWatchFile = function(filename) {
+  openWatch({ type: 'file', filename });
+};
+window.openWatchTorrent = function(infoHash, fileIndex) {
+  openWatch({ type: 'torrent', infoHash, fileIndex: Number(fileIndex) });
+};
+
 // === DLNA функции ===
 
 // Форматирование времени
@@ -923,6 +1023,32 @@ document.addEventListener('DOMContentLoaded', () => {
   playBtn.addEventListener('click', () => controlPlayback('play'));
   pauseBtn.addEventListener('click', () => controlPlayback('pause'));
   stopBtn.addEventListener('click', () => controlPlayback('stop'));
+
+  // Watch обработчики
+  watchBack.addEventListener('click', closeWatch);
+
+  watchPlayer.addEventListener('pause', () => {
+    if (currentWatch && watchPlayer.currentTime > 5) {
+      localStorage.setItem(watchPosKey(currentWatch), String(watchPlayer.currentTime));
+    }
+  });
+  watchPlayer.addEventListener('seeked', () => {
+    if (currentWatch && watchPlayer.currentTime > 5) {
+      localStorage.setItem(watchPosKey(currentWatch), String(watchPlayer.currentTime));
+    }
+  });
+  window.addEventListener('beforeunload', () => {
+    if (currentWatch && watchPlayer.currentTime > 5) {
+      localStorage.setItem(watchPosKey(currentWatch), String(watchPlayer.currentTime));
+    }
+  });
+
+  watchPlayer.addEventListener('error', () => {
+    const err = watchPlayer.error;
+    const msg = err ? `код ${err.code}` : 'неизвестная';
+    watchStatus.textContent = `Ошибка воспроизведения (${msg}). Попробуйте другое качество.`;
+    watchStatus.classList.add('error');
+  });
 
   // Проверка авторизации
   checkAuth();
