@@ -697,6 +697,79 @@ app.post('/api/dlna/cast', authMiddleware, async (req, res) => {
   }
 });
 
+// Резолвинг URL для онлайн-просмотра в браузере
+app.post('/api/watch/resolve', authMiddleware, async (req, res) => {
+  const { type, filename, infoHash, fileIndex, quality } = req.body;
+  const requestedQuality = quality || 'medium';
+  const host = req.headers.host;
+
+  try {
+    let url, mimeType, title, size, isTranscoding = false, duration = null;
+
+    if (type === 'torrent') {
+      if (!infoHash || fileIndex === undefined) {
+        return res.status(400).json({ error: 'Укажите infoHash и fileIndex' });
+      }
+
+      const fileInfo = streamingServer.getTorrentFileInfo(infoHash, fileIndex);
+      if (!fileInfo) {
+        return res.status(404).json({ error: 'Файл торрента не найден' });
+      }
+
+      url = streamingServer.getTorrentStreamUrl(infoHash, fileIndex, host);
+      mimeType = fileInfo.mimeType;
+      title = fileInfo.name;
+      size = fileInfo.size;
+    } else if (type === 'file') {
+      if (!filename) {
+        return res.status(400).json({ error: 'Укажите filename' });
+      }
+
+      const fileInfo = streamingServer.getFileInfo(filename);
+      if (!fileInfo) {
+        return res.status(404).json({ error: 'Файл не найден' });
+      }
+
+      const needsTranscoding = transcoder.needsTranscoding(filename);
+      const forceTranscoding = requestedQuality !== 'original' && requestedQuality !== undefined;
+
+      if (needsTranscoding || forceTranscoding) {
+        url = transcoder.getTranscodeUrl(filename, host, requestedQuality);
+        mimeType = 'video/mp4';
+        isTranscoding = true;
+      } else {
+        url = streamingServer.getStreamUrl(filename, host);
+        mimeType = fileInfo.mimeType;
+      }
+
+      title = path.basename(filename);
+      size = fileInfo.size;
+
+      try {
+        const info = await transcoder.getMediaInfo(path.join(downloadDirectory, filename));
+        duration = info.duration || null;
+      } catch (e) {
+        duration = null;
+      }
+    } else {
+      return res.status(400).json({ error: 'Неизвестный type, ожидается "file" или "torrent"' });
+    }
+
+    res.json({
+      url,
+      mimeType,
+      title,
+      size,
+      duration,
+      isTranscoding,
+      qualities: ['original', 'high', 'medium', 'low']
+    });
+  } catch (error) {
+    console.error('Ошибка resolve:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Управление воспроизведением
 app.post('/api/dlna/control/:action', authMiddleware, async (req, res) => {
   const { action } = req.params;
