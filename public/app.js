@@ -501,6 +501,7 @@ function renderTorrents(torrents) {
                 <span class="torrent-file-name">${escapeHtml(file.name)}</span>
                 <span class="torrent-file-size">${formatBytes(file.length)}</span>
                 <span class="torrent-file-progress">${file.selected ? file.progress + '%' : 'Пропущен'}</span>
+                ${isVideoFile(file.name) && file.selected !== false ? `<button class="btn-watch btn-small" onclick="openWatchTorrent('${torrent.infoHash}', ${index})">▶ Смотреть</button>` : ''}
                 ${isMediaFile(file.name) ? `<button class="btn-cast btn-small" onclick="showCastModal(null, {infoHash: '${torrent.infoHash}', fileIndex: ${index}})">Cast</button>` : ''}
               </div>
             `).join('')}
@@ -565,6 +566,13 @@ function isMediaFile(filename) {
   return mediaExtensions.includes(ext);
 }
 
+// Является ли файл видео (без audio)
+function isVideoFile(filename) {
+  const ext = filename.split('.').pop().toLowerCase();
+  const videoExtensions = ['mp4', 'mkv', 'avi', 'webm', 'mov', 'wmv', 'flv', 'm4v'];
+  return videoExtensions.includes(ext);
+}
+
 // Отрисовка списка файлов
 function renderFiles(files) {
   if (files.length === 0) {
@@ -579,6 +587,7 @@ function renderFiles(files) {
         <div class="file-size">${formatBytes(file.size)}</div>
       </div>
       <div class="file-actions">
+        ${isVideoFile(file.name) ? `<button class="btn-watch btn-small" onclick="openWatchFile('${escapeHtml(file.name).replace(/'/g, "\\'")}')">▶ Смотреть</button>` : ''}
         ${isMediaFile(file.name) ? `<button class="btn-cast btn-small" onclick="showCastModal('${escapeHtml(file.name)}')">Транслировать</button>` : ''}
         <button class="btn-danger btn-small" onclick="removeFile('${escapeHtml(file.name)}')">Удалить</button>
       </div>
