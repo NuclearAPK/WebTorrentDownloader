@@ -14,6 +14,19 @@ const magnetInput = document.getElementById('magnetUri');
 const addMagnetBtn = document.getElementById('addMagnet');
 const torrentFileInput = document.getElementById('torrentFile');
 const uploadTorrentBtn = document.getElementById('uploadTorrent');
+const videoFileInput = document.getElementById('videoFile');
+const uploadVideoBtn = document.getElementById('uploadVideo');
+const videoUploadProgress = document.getElementById('videoUploadProgress');
+const videoUploadName = document.getElementById('videoUploadName');
+const videoUploadStats = document.getElementById('videoUploadStats');
+const videoUploadFill = document.getElementById('videoUploadFill');
+const videoUploadCancel = document.getElementById('videoUploadCancel');
+const conflictModal = document.getElementById('conflictModal');
+const conflictFilename = document.getElementById('conflictFilename');
+const conflictSuggested = document.getElementById('conflictSuggested');
+const conflictOverwrite = document.getElementById('conflictOverwrite');
+const conflictRename = document.getElementById('conflictRename');
+const conflictCancel = document.getElementById('conflictCancel');
 const downloadDirInput = document.getElementById('downloadDir');
 const changeDirBtn = document.getElementById('changeDir');
 const torrentsList = document.getElementById('torrentsList');
@@ -287,6 +300,168 @@ async function uploadTorrentFile() {
     }
   } catch (error) {
     showNotification('Ошибка загрузки файла', 'error');
+  }
+}
+
+// === Загрузка видеофайлов ===
+
+const VIDEO_EXTENSIONS_CLIENT = new Set([
+  '.mp4', '.mkv', '.avi', '.webm', '.mov', '.m4v',
+  '.wmv', '.flv', '.ts', '.mpg', '.mpeg', '.3gp', '.ogv'
+]);
+const MAX_VIDEO_SIZE_CLIENT = 20 * 1024 * 1024 * 1024;
+
+let currentVideoUpload = null;
+
+function getFileExtension(name) {
+  const idx = name.lastIndexOf('.');
+  return idx >= 0 ? name.slice(idx).toLowerCase() : '';
+}
+
+function askConflictResolution(filename, suggested) {
+  return new Promise((resolve) => {
+    conflictFilename.textContent = filename;
+    conflictSuggested.textContent = suggested;
+    conflictModal.style.display = 'flex';
+
+    const cleanup = (choice) => {
+      conflictModal.style.display = 'none';
+      conflictOverwrite.removeEventListener('click', onOverwrite);
+      conflictRename.removeEventListener('click', onRename);
+      conflictCancel.removeEventListener('click', onCancel);
+      resolve(choice);
+    };
+
+    const onOverwrite = () => cleanup('overwrite');
+    const onRename = () => cleanup('rename');
+    const onCancel = () => cleanup('cancel');
+
+    conflictOverwrite.addEventListener('click', onOverwrite);
+    conflictRename.addEventListener('click', onRename);
+    conflictCancel.addEventListener('click', onCancel);
+  });
+}
+
+function resetVideoUploadUI() {
+  videoUploadProgress.style.display = 'none';
+  videoUploadFill.style.width = '0%';
+  videoUploadStats.textContent = '0% • 0 МБ/с';
+  videoUploadName.textContent = '';
+  uploadVideoBtn.disabled = false;
+  videoFileInput.disabled = false;
+  currentVideoUpload = null;
+}
+
+function performUpload(file, targetName, mode) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const startTime = Date.now();
+
+    videoUploadProgress.style.display = 'flex';
+    videoUploadName.textContent = targetName;
+    videoUploadFill.style.width = '0%';
+    videoUploadStats.textContent = '0% • 0 МБ/с';
+    uploadVideoBtn.disabled = true;
+    videoFileInput.disabled = true;
+    currentVideoUpload = xhr;
+
+    xhr.upload.onprogress = (e) => {
+      if (!e.lengthComputable) return;
+      const percent = Math.floor((e.loaded / e.total) * 100);
+      const elapsed = Math.max((Date.now() - startTime) / 1000, 0.001);
+      const mbPerSec = (e.loaded / 1024 / 1024) / elapsed;
+      videoUploadFill.style.width = percent + '%';
+      videoUploadStats.textContent = `${percent}% • ${mbPerSec.toFixed(2)} МБ/с`;
+    };
+
+    xhr.onload = () => {
+      let data = {};
+      try { data = JSON.parse(xhr.responseText); } catch (_) {}
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(data);
+      } else {
+        reject(new Error(data.error || `HTTP ${xhr.status}`));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error('Сетевая ошибка'));
+    xhr.onabort = () => reject(new Error('ABORTED'));
+
+    const url = `/api/upload/video?targetName=${encodeURIComponent(targetName)}&mode=${mode}`;
+    xhr.open('POST', url);
+    if (authToken) xhr.setRequestHeader('Authorization', `Bearer ${authToken}`);
+
+    const fd = new FormData();
+    fd.append('videoFile', file, targetName);
+    xhr.send(fd);
+  });
+}
+
+async function uploadVideoFile() {
+  const file = videoFileInput.files[0];
+  if (!file) {
+    showNotification('Выберите видеофайл', 'error');
+    return;
+  }
+
+  const ext = getFileExtension(file.name);
+  if (!VIDEO_EXTENSIONS_CLIENT.has(ext)) {
+    showNotification('Поддерживаются только видеофайлы', 'error');
+    return;
+  }
+
+  if (file.size > MAX_VIDEO_SIZE_CLIENT) {
+    showNotification('Файл превышает лимит 20 ГБ', 'error');
+    return;
+  }
+
+  let safeName;
+  let mode = 'new';
+
+  try {
+    const checkResp = await apiRequest(`/api/upload/video/check?name=${encodeURIComponent(file.name)}`);
+    const checkData = await checkResp.json();
+
+    if (!checkResp.ok) {
+      showNotification(checkData.error || 'Ошибка проверки имени файла', 'error');
+      return;
+    }
+
+    safeName = checkData.safeName;
+
+    if (checkData.exists) {
+      const choice = await askConflictResolution(safeName, checkData.suggested);
+      if (choice === 'cancel') return;
+      if (choice === 'overwrite') {
+        mode = 'overwrite';
+      } else if (choice === 'rename') {
+        safeName = checkData.suggested;
+      }
+    }
+  } catch (err) {
+    showNotification('Ошибка проверки имени файла', 'error');
+    return;
+  }
+
+  try {
+    await performUpload(file, safeName, mode);
+    showNotification('Видео загружено', 'success');
+    videoFileInput.value = '';
+    loadFiles();
+  } catch (err) {
+    if (err.message === 'ABORTED') {
+      showNotification('Загрузка отменена', 'info');
+    } else {
+      showNotification(err.message || 'Ошибка загрузки видео', 'error');
+    }
+  } finally {
+    resetVideoUploadUI();
+  }
+}
+
+function cancelVideoUpload() {
+  if (currentVideoUpload) {
+    currentVideoUpload.abort();
   }
 }
 
@@ -1045,6 +1220,8 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   uploadTorrentBtn.addEventListener('click', uploadTorrentFile);
+  uploadVideoBtn.addEventListener('click', uploadVideoFile);
+  videoUploadCancel.addEventListener('click', cancelVideoUpload);
   changeDirBtn.addEventListener('click', changeDirectory);
   refreshFilesBtn.addEventListener('click', loadFiles);
 

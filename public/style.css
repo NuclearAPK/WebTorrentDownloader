@@ -865,6 +865,119 @@ button:active {
   color: #e4e4e4;
 }
 
+/* === Загрузка видеофайлов === */
+
+.video-upload-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(0, 217, 255, 0.2);
+  border-radius: 8px;
+}
+
+.upload-progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  gap: 10px;
+}
+
+.upload-name {
+  color: #e4e4e4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.upload-stats {
+  color: #00d9ff;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.upload-bar {
+  height: 8px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.upload-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #00d9ff 0%, #00ff88 100%);
+  border-radius: 4px;
+  transition: width 0.2s ease-out;
+}
+
+.video-upload-progress .btn-small {
+  align-self: flex-end;
+}
+
+/* === Модальное окно (конфликт имени) === */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.modal-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 10, 20, 0.7);
+  backdrop-filter: blur(2px);
+}
+
+.modal-content {
+  position: relative;
+  max-width: 480px;
+  width: 100%;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border: 1px solid rgba(0, 217, 255, 0.3);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.modal-content h3 {
+  color: #00d9ff;
+  margin-bottom: 12px;
+  font-size: 1.2rem;
+}
+
+.modal-content p {
+  color: #a0a0a0;
+  margin-bottom: 10px;
+  font-size: 0.95rem;
+}
+
+.modal-content strong {
+  color: #e4e4e4;
+  word-break: break-all;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
+.modal-actions button {
+  flex: 1;
+  min-width: 120px;
+}
+
 /* Responsive */
 @media (max-width: 600px) {
   .container {

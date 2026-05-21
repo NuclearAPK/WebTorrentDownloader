@@ -121,6 +121,78 @@ const upload = multer({
   }
 });
 
+// === Загрузка видеофайлов ===
+
+const VIDEO_EXTENSIONS = new Set([
+  '.mp4', '.mkv', '.avi', '.webm', '.mov', '.m4v',
+  '.wmv', '.flv', '.ts', '.mpg', '.mpeg', '.3gp', '.ogv'
+]);
+
+const MAX_VIDEO_SIZE_BYTES = 20 * 1024 * 1024 * 1024;
+const FORBIDDEN_FILENAME_CHARS = /[<>:"|?*\x00-\x1F]/g;
+
+function sanitizeFilename(rawName) {
+  if (typeof rawName !== 'string' || rawName.length === 0) {
+    throw new Error('INVALID_FILENAME');
+  }
+
+  const base = path.basename(rawName).replace(FORBIDDEN_FILENAME_CHARS, '').trim();
+
+  if (base.length === 0 || base.length > 255 || base === '.' || base === '..') {
+    throw new Error('INVALID_FILENAME');
+  }
+
+  return base;
+}
+
+function isInsideDownloadDir(absolutePath) {
+  const normalized = path.normalize(absolutePath);
+  const dir = path.normalize(downloadDirectory);
+  return normalized === dir || normalized.startsWith(dir + path.sep);
+}
+
+function findAvailableName(safeName) {
+  const ext = path.extname(safeName);
+  const stem = safeName.slice(0, safeName.length - ext.length);
+
+  for (let i = 1; i < 10000; i++) {
+    const candidate = `${stem} (${i})${ext}`;
+    if (!fs.existsSync(path.join(downloadDirectory, candidate))) {
+      return candidate;
+    }
+  }
+
+  return `${stem} (${Date.now()})${ext}`;
+}
+
+const videoUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, downloadDirectory),
+    filename: (req, file, cb) => {
+      try {
+        const targetName = sanitizeFilename(req.query.targetName || file.originalname);
+        const target = path.join(downloadDirectory, targetName);
+        if (!isInsideDownloadDir(target)) {
+          return cb(new Error('INVALID_FILENAME'));
+        }
+        req._videoTargetName = targetName;
+        cb(null, targetName);
+      } catch (err) {
+        cb(err);
+      }
+    }
+  }),
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (VIDEO_EXTENSIONS.has(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('UNSUPPORTED_MEDIA_TYPE'));
+    }
+  },
+  limits: { fileSize: MAX_VIDEO_SIZE_BYTES }
+});
+
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -373,6 +445,104 @@ app.post('/api/download/file', authMiddleware, upload.single('torrentFile'), (re
     }
     res.status(500).json({ error: error.message });
   }
+});
+
+// Проверка коллизии имени видеофайла перед загрузкой
+app.get('/api/upload/video/check', authMiddleware, (req, res) => {
+  let safeName;
+  try {
+    safeName = sanitizeFilename(req.query.name);
+  } catch (err) {
+    return res.status(400).json({ error: 'Недопустимое имя файла' });
+  }
+
+  const ext = path.extname(safeName).toLowerCase();
+  if (!VIDEO_EXTENSIONS.has(ext)) {
+    return res.status(415).json({ error: 'Поддерживаются только видеофайлы' });
+  }
+
+  const target = path.join(downloadDirectory, safeName);
+  if (!isInsideDownloadDir(target)) {
+    return res.status(400).json({ error: 'Недопустимое имя файла' });
+  }
+
+  const exists = fs.existsSync(target);
+  if (!exists) {
+    return res.json({ exists: false, safeName });
+  }
+
+  return res.json({
+    exists: true,
+    safeName,
+    suggested: findAvailableName(safeName)
+  });
+});
+
+// Загрузка видеофайла в каталог загрузки
+app.post('/api/upload/video', authMiddleware, (req, res) => {
+  let safeName;
+  try {
+    safeName = sanitizeFilename(req.query.targetName);
+  } catch (err) {
+    return res.status(400).json({ error: 'Недопустимое имя файла' });
+  }
+
+  const ext = path.extname(safeName).toLowerCase();
+  if (!VIDEO_EXTENSIONS.has(ext)) {
+    return res.status(415).json({ error: 'Поддерживаются только видеофайлы' });
+  }
+
+  const mode = req.query.mode === 'overwrite' ? 'overwrite' : 'new';
+  const targetPath = path.join(downloadDirectory, safeName);
+
+  if (!isInsideDownloadDir(targetPath)) {
+    return res.status(400).json({ error: 'Недопустимое имя файла' });
+  }
+
+  if (mode === 'new' && fs.existsSync(targetPath)) {
+    return res.status(409).json({ error: 'Файл с таким именем уже существует' });
+  }
+
+  let aborted = false;
+  const cleanupPartial = () => {
+    fs.unlink(targetPath, () => {});
+  };
+
+  req.on('aborted', () => {
+    aborted = true;
+    console.log(`Загрузка видео отменена: ${safeName}`);
+    cleanupPartial();
+  });
+
+  videoUpload.single('videoFile')(req, res, (err) => {
+    if (err) {
+      cleanupPartial();
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: 'Файл превышает лимит 20 ГБ' });
+      }
+      if (err.message === 'UNSUPPORTED_MEDIA_TYPE') {
+        return res.status(415).json({ error: 'Поддерживаются только видеофайлы' });
+      }
+      if (err.message === 'INVALID_FILENAME') {
+        return res.status(400).json({ error: 'Недопустимое имя файла' });
+      }
+      console.error(`Ошибка загрузки видео: ${err.message}`);
+      return res.status(500).json({ error: err.message });
+    }
+
+    if (aborted) return;
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'Видеофайл не получен' });
+    }
+
+    console.log(`Видео загружено: ${req.file.filename} (${req.file.size} байт)`);
+    res.json({
+      success: true,
+      filename: req.file.filename,
+      size: req.file.size
+    });
+  });
 });
 
 // Список активных торрентов
